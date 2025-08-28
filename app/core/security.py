@@ -26,6 +26,8 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+
+
 def create_access_token(subject: str, role: str = "user", expires_delta: Optional[timedelta] = None) -> str:
     to_encode = {
         "sub": subject,
@@ -57,5 +59,5 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 def require_admin(user: models.User = Depends(get_current_user)) -> models.User:
     if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     return user

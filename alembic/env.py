@@ -47,6 +47,8 @@ def run_migrations_offline() -> None:
 
     """
     url = settings.DATABASE_URL
+    if url.startswith("sqlite"):
+        raise RuntimeError("SQLite is not supported for migrations. Please configure PostgreSQL DATABASE_URL.")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -66,17 +68,15 @@ def run_migrations_online() -> None:
 
     """
     from sqlalchemy import create_engine
-    
+
     # use the same engine config as the main app
     url = settings.DATABASE_URL
-    connect_args = {}
     if url.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
-    
+        raise RuntimeError("SQLite is not supported for migrations. Please configure PostgreSQL DATABASE_URL.")
+
     connectable = create_engine(
         url,
         poolclass=pool.NullPool,
-        connect_args=connect_args,
     )
 
     with connectable.connect() as connection:

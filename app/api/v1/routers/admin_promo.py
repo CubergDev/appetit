@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.security import require_admin
 from app.db.session import get_db
 from app import models
-from app.schemas.admin import PromoGenerateRequest, PromoGenerateResponse
+from app.schemas.admin import PromoGenerateRequest, PromoGenerateResponse, PromoOut, PromoUpdate
 
 router = APIRouter(prefix="/admin/promo", tags=["admin"])
 
@@ -60,3 +60,99 @@ def generate_promo(req: PromoGenerateRequest, db: Session = Depends(get_db), adm
             continue
 
     return PromoGenerateResponse(batch_id=batch.id, generated=created, prefix=req.prefix, length=req.length)
+
+
+# Promocode CRUD operations
+
+@router.get("", response_model=List[PromoOut])
+def list_promocodes(
+    active: bool = None,
+    db: Session = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """List all promocodes"""
+    q = db.query(models.Promocode)
+    if active is not None:
+        q = q.filter(models.Promocode.active == active)
+    q = q.order_by(models.Promocode.created_at.desc())
+    return q.all()
+
+
+@router.get("/{code}", response_model=PromoOut)
+def get_promocode(
+    code: str,
+    db: Session = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """Get a specific promocode"""
+    promo = db.get(models.Promocode, code)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promocode not found")
+    return promo
+
+
+@router.put("/{code}", response_model=PromoOut)
+def update_promocode(
+    code: str,
+    payload: PromoUpdate,
+    db: Session = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """Update a promocode"""
+    promo = db.get(models.Promocode, code)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promocode not found")
+    
+    # Update fields if provided
+    if payload.kind is not None:
+        if payload.kind not in ["percent", "amount"]:
+            raise HTTPException(status_code=400, detail="Invalid kind. Must be 'percent' or 'amount'")
+        promo.kind = payload.kind
+    
+    if payload.value is not None:
+        if payload.value <= 0:
+            raise HTTPException(status_code=400, detail="Value must be greater than 0")
+        promo.value = payload.value
+    
+    if payload.active is not None:
+        promo.active = payload.active
+    
+    if payload.valid_from is not None:
+        promo.valid_from = payload.valid_from
+    
+    if payload.valid_to is not None:
+        promo.valid_to = payload.valid_to
+    
+    if payload.max_redemptions is not None:
+        promo.max_redemptions = payload.max_redemptions
+    
+    if payload.per_user_limit is not None:
+        promo.per_user_limit = payload.per_user_limit
+    
+    if payload.min_subtotal is not None:
+        promo.min_subtotal = payload.min_subtotal
+    
+    db.add(promo)
+    db.commit()
+    db.refresh(promo)
+    return promo
+
+
+@router.delete("/{code}")
+def delete_promocode(
+    code: str,
+    db: Session = Depends(get_db),
+    admin = Depends(require_admin)
+):
+    """Delete a promocode"""
+    promo = db.get(models.Promocode, code)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promocode not found")
+    
+    # Check if promocode has been used
+    if promo.used_count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete promocode that has been used. Consider deactivating instead.")
+    
+    db.delete(promo)
+    db.commit()
+    return {"message": "Promocode deleted successfully"}

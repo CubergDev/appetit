@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
-from app.core.security import optional_oauth2_scheme, decode_token
+from app.core.security import optional_oauth2_scheme, decode_token, require_admin
 from app.db.session import get_db
 from app import models
 from app.schemas.devices import DeviceRegisterRequest, DeviceOut
@@ -34,3 +34,31 @@ def register_device(payload: DeviceRegisterRequest, db: Session = Depends(get_db
     db.commit()
     db.refresh(device)
     return device
+
+
+# Admin device management
+
+@router.get("", response_model=List[DeviceOut])
+def list_devices(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    """List all devices (Admin only)"""
+    devices = db.query(models.Device).order_by(models.Device.created_at.desc()).all()
+    return devices
+
+
+@router.delete("/{device_id}")
+def delete_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_admin)
+):
+    """Delete a device (Admin only)"""
+    device = db.get(models.Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    db.delete(device)
+    db.commit()
+    return {"message": "Device deleted successfully"}

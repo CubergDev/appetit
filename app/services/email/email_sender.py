@@ -60,27 +60,88 @@ def add_utm_parameters(url: str, template: str) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
-def select_subject(template: str, variables: Dict[str, Any]) -> str:
-    """Select and format subject line for a template."""
+def select_subject(template: str, variables: Dict[str, Any], locale: str = "en") -> str:
+    """Select and format subject line for a template with locale support."""
     if template not in TEMPLATES:
         return f"Notification from {FROM_NAME}"
     
-    subject_template = TEMPLATES[template]["subject"]
+    # Locale-specific subjects
+    subjects = {
+        "verify_email": {
+            "en": "Verify your email address",
+            "ru": "Подтвердите ваш email адрес",
+            "kz": "Электрондық поштаңызды растаңыз"
+        },
+        "order_created": {
+            "en": "Order #{order_id} created",
+            "ru": "Заказ №{order_id} создан",
+            "kz": "Тапсырыс №{order_id} жасалды"
+        },
+        "order_status": {
+            "en": "Order #{order_id} status update", 
+            "ru": "Обновление статуса заказа №{order_id}",
+            "kz": "Тапсырыс №{order_id} мәртебесі жаңартылды"
+        },
+        "order_delivered": {
+            "en": "Order #{order_id} delivered",
+            "ru": "Заказ №{order_id} доставлен",
+            "kz": "Тапсырыс №{order_id} жеткізілді"
+        },
+        "password_reset": {
+            "en": "Reset your password",
+            "ru": "Сброс пароля",
+            "kz": "Құпия сөзді қалпына келтіру"
+        }
+    }
     
-    # simple variable substitution for subjects
+    # Get localized subject or fallback to English or default template
+    if template in subjects:
+        subject_template = subjects[template].get(locale, subjects[template].get("en", TEMPLATES[template]["subject"]))
+    else:
+        subject_template = TEMPLATES[template]["subject"]
+    
+    # Simple variable substitution for subjects
     try:
         return subject_template.format(**variables)
     except (KeyError, ValueError):
         return subject_template
 
 
-def render_template(template: str, variables: Dict[str, Any]) -> str:
-    """Render HTML template with variables and UTM parameters."""
+def render_template(template: str, variables: Dict[str, Any], locale: str = "en") -> str:
+    """Render HTML template with variables, UTM parameters, and locale support."""
     # add UTM parameters to all URLs in variables
     enhanced_vars = variables.copy()
     for key, value in variables.items():
         if isinstance(value, str) and key.endswith('_url'):
             enhanced_vars[key] = add_utm_parameters(value, template)
+    
+    # Helper function to get localized text
+    def get_text(key: str) -> str:
+        texts = {
+            "hello": {"en": "Hello", "ru": "Привет", "kz": "Сәлем"},
+            "verify_email_desc": {"en": "Please verify your email address to complete your account setup.", "ru": "Пожалуйста, подтвердите свой email для завершения настройки аккаунта.", "kz": "Тіркелгіні орнатуды аяқтау үшін электрондық поштаңызды растаңыз."},
+            "verification_code": {"en": "Your verification code", "ru": "Ваш код подтверждения", "kz": "Сіздің растау кодыңыз"},
+            "verify_email_btn": {"en": "Verify Email", "ru": "Подтвердить Email", "kz": "Email растау"},
+            "button_not_work": {"en": "If the button doesn't work, copy and paste this link", "ru": "Если кнопка не работает, скопируйте и вставьте эту ссылку", "kz": "Егер түйме жұмыс істемесе, осы сілтемені көшіріп жапсырыңыз"},
+            "order_confirmed": {"en": "Order #{order_id} Confirmed!", "ru": "Заказ №{order_id} подтвержден!", "kz": "Тапсырыс №{order_id} расталды!"},
+            "thank_you_order": {"en": "Thank you for your order. We're preparing it now.", "ru": "Спасибо за ваш заказ. Мы готовим его сейчас.", "kz": "Тапсырысыңыз үшін рахмет. Біз оны дайындап жатырмыз."},
+            "type": {"en": "Type", "ru": "Тип", "kz": "Түрі"},
+            "estimated_time": {"en": "Estimated time", "ru": "Предполагаемое время", "kz": "Болжалды уақыт"},
+            "view_order": {"en": "View Order", "ru": "Посмотреть заказ", "kz": "Тапсырысты көру"},
+            "pickup": {"en": "Pickup", "ru": "Самовывоз", "kz": "Өзіңіз алу"},
+            "delivery": {"en": "Delivery", "ru": "Доставка", "kz": "Жеткізу"},
+            "order_update": {"en": "Order #{order_id} Update", "ru": "Обновление заказа №{order_id}", "kz": "Тапсырыс №{order_id} жаңартылуы"},
+            "status_updated": {"en": "Your order status has been updated to", "ru": "Статус вашего заказа обновлен до", "kz": "Тапсырысыңыздың мәртебесі жаңартылды"},
+            "order_delivered_msg": {"en": "Order #{order_id} Delivered!", "ru": "Заказ №{order_id} доставлен!", "kz": "Тапсырыс №{order_id} жеткізілді!"},
+            "delivered_thanks": {"en": "Your order has been successfully delivered. Thank you for choosing us!", "ru": "Ваш заказ успешно доставлен. Спасибо, что выбрали нас!", "kz": "Тапсырысыңыз сәтті жеткізілді. Бізді таңдағаныңыз үшін рахмет!"},
+            "rate_experience": {"en": "How was your experience?", "ru": "Как вам понравился наш сервис?", "kz": "Біздің қызмет қалай ұнады?"},
+            "rate_order": {"en": "Rate Your Order", "ru": "Оценить заказ", "kz": "Тапсырысты бағалау"},
+            "password_reset_msg": {"en": "Password Reset Request", "ru": "Запрос на сброс пароля", "kz": "Құпия сөзді қалпына келтіру сұрауы"},
+            "reset_desc": {"en": "You requested to reset your password. Click the button below to create a new password:", "ru": "Вы запросили сброс пароля. Нажмите кнопку ниже, чтобы создать новый пароль:", "kz": "Сіз құпия сөзді қалпына келтіруді сұрадыңыз. Жаңа құпия сөз жасау үшін төмендегі түймені басыңыз:"},
+            "reset_password": {"en": "Reset Password", "ru": "Сбросить пароль", "kz": "Құпия сөзді қалпына келтіру"},
+            "ignore_if_not_requested": {"en": "If you didn't request this, please ignore this email.", "ru": "Если вы не запрашивали это, пожалуйста, проигнорируйте это письмо.", "kz": "Егер сіз мұны сұрамаған болсаңыз, бұл хатты елемеңіз."}
+        }
+        return texts.get(key, {}).get(locale, texts.get(key, {}).get("en", ""))
     
     if template == "verify_email":
         user_name = enhanced_vars.get("user_name", "User")
@@ -89,11 +150,11 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
         
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Hello {user_name}!</h2>
-            <p>Please verify your email address to complete your account setup.</p>
-            {f'<p>Your verification code: <strong>{otp}</strong></p>' if otp else ''}
-            <p><a href="{verify_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Verify Email</a></p>
-            <p>If the button doesn't work, copy and paste this link: <a href="{verify_url}">{verify_url}</a></p>
+            <h2>{get_text('hello')} {user_name}!</h2>
+            <p>{get_text('verify_email_desc')}</p>
+            {f'<p>{get_text("verification_code")}: <strong>{otp}</strong></p>' if otp else ''}
+            <p><a href="{verify_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">{get_text('verify_email_btn')}</a></p>
+            <p>{get_text('button_not_work')}: <a href="{verify_url}">{verify_url}</a></p>
         </div>
         """
         
@@ -103,13 +164,16 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
         pickup_or_delivery = enhanced_vars.get("pickup_or_delivery", "pickup")
         eta = enhanced_vars.get("eta", "")
         
+        # Localize pickup/delivery type
+        delivery_type_localized = get_text("pickup") if pickup_or_delivery.lower() == "pickup" else get_text("delivery")
+        
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Order #{order_id} Confirmed!</h2>
-            <p>Thank you for your order. We're preparing it now.</p>
-            <p><strong>Type:</strong> {pickup_or_delivery.title()}</p>
-            <p><strong>Estimated time:</strong> {eta}</p>
-            <p><a href="{order_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">View Order</a></p>
+            <h2>{get_text('order_confirmed').format(order_id=order_id)}</h2>
+            <p>{get_text('thank_you_order')}</p>
+            <p><strong>{get_text('type')}:</strong> {delivery_type_localized}</p>
+            <p><strong>{get_text('estimated_time')}:</strong> {eta}</p>
+            <p><a href="{order_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">{get_text('view_order')}</a></p>
         </div>
         """
         
@@ -120,9 +184,9 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
         
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Order #{order_id} Update</h2>
-            <p>Your order status has been updated to: <strong>{status.title()}</strong></p>
-            <p><strong>Estimated time:</strong> {eta}</p>
+            <h2>{get_text('order_update').format(order_id=order_id)}</h2>
+            <p>{get_text('status_updated')}: <strong>{status.title()}</strong></p>
+            <p><strong>{get_text('estimated_time')}:</strong> {eta}</p>
         </div>
         """
         
@@ -132,10 +196,10 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
         
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Order #{order_id} Delivered!</h2>
-            <p>Your order has been successfully delivered. Thank you for choosing us!</p>
-            <p>How was your experience?</p>
-            <p><a href="{rating_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Rate Your Order</a></p>
+            <h2>{get_text('order_delivered_msg').format(order_id=order_id)}</h2>
+            <p>{get_text('delivered_thanks')}</p>
+            <p>{get_text('rate_experience')}</p>
+            <p><a href="{rating_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">{get_text('rate_order')}</a></p>
         </div>
         """
         
@@ -144,11 +208,11 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
         
         html = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Password Reset Request</h2>
-            <p>You requested to reset your password. Click the button below to create a new password:</p>
-            <p><a href="{reset_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Reset Password</a></p>
-            <p>If you didn't request this, please ignore this email.</p>
-            <p>If the button doesn't work, copy and paste this link: <a href="{reset_url}">{reset_url}</a></p>
+            <h2>{get_text('password_reset_msg')}</h2>
+            <p>{get_text('reset_desc')}</p>
+            <p><a href="{reset_url}" style="background: #007cba; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">{get_text('reset_password')}</a></p>
+            <p>{get_text('ignore_if_not_requested')}</p>
+            <p>{get_text('button_not_work')}: <a href="{reset_url}">{reset_url}</a></p>
         </div>
         """
     else:
@@ -162,7 +226,8 @@ def send_email(
     to: str, 
     variables: Dict[str, Any], 
     user_id: Optional[int] = None, 
-    idempotency_key: Optional[str] = None
+    idempotency_key: Optional[str] = None,
+    locale: str = "en"
 ) -> Dict[str, Any]:
     """
     Send transactional email using Resend API.
@@ -173,6 +238,7 @@ def send_email(
         variables: Template variables
         user_id: Optional user ID for tracking
         idempotency_key: Optional key for preventing duplicate sends
+        locale: Locale code for localized content (en, ru, kz)
         
     Returns:
         Dict with result including message_id from Resend
@@ -193,8 +259,8 @@ def send_email(
     try:
         resend.api_key = os.environ["RESEND_API_KEY"]
         
-        subject = select_subject(template, variables)
-        html = render_template(template, variables)
+        subject = select_subject(template, variables, locale)
+        html = render_template(template, variables, locale)
         
         params = {
             "from": f"{FROM_NAME} <{FROM_EMAIL}>",

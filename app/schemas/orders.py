@@ -2,10 +2,13 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
+from .modifications import OrderItemModificationIn, OrderItemModificationOut
+
 
 class OrderItemIn(BaseModel):
     item_id: int
     qty: int
+    modifications: Optional[List[OrderItemModificationIn]] = []
 
 
 class OrderCreateRequest(BaseModel):
@@ -22,12 +25,23 @@ class OrderCreateRequest(BaseModel):
     ga_client_id: Optional[str] = None
 
 
+class OrderUpdate(BaseModel):
+    status: Optional[str] = None
+    fulfillment: Optional[str] = None  # delivery|pickup
+    address_text: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    paid: Optional[bool] = None
+    payment_method: Optional[str] = None
+
+
 class OrderItemOut(BaseModel):
     id: int
     item_id: Optional[int]
     name_snapshot: str
     qty: int
     price_at_moment: float
+    modifications: Optional[List[OrderItemModificationOut]] = []
 
     class Config:
         from_attributes = True

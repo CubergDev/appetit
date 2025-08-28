@@ -6,16 +6,29 @@ from app.core.config import settings
 
 def _build_engine():
     url = settings.DATABASE_URL
-    connect_args = {}
+    engine_kwargs = {
+        "echo": (settings.APP_ENV == "dev"),
+        "pool_pre_ping": True,
+        "future": True,
+    }
+
     if url.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
-    return create_engine(
-        url,
-        echo=(settings.APP_ENV == "dev"),
-        pool_pre_ping=True,
-        future=True,
-        connect_args=connect_args,
-    )
+        raise RuntimeError("SQLite is not supported. Please configure PostgreSQL via DATABASE_URL or DB_* settings.")
+
+    # PostgreSQL specific configuration with secure connection pooling
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_CONNECTION_TIMEOUT,
+        "pool_recycle": 3600,  # Recycle connections every hour
+        "pool_reset_on_return": "commit",  # Reset connections on return
+        "connect_args": {
+            "connect_timeout": settings.DB_CONNECTION_TIMEOUT,
+            "application_name": "appetit_backend",
+        }
+    })
+
+    return create_engine(url, **engine_kwargs)
 
 
 engine = _build_engine()

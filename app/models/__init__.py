@@ -8,7 +8,14 @@ from .models import (
     Order,
     OrderItem,
     EmailVerification,
+    PhoneVerification,
     EmailEvent,
+    SavedAddress,
+    ModificationType,
+    OrderItemModification,
+    Cart,
+    CartItem,
+    CartItemModification,
 )
 
 __all__ = [
@@ -21,5 +28,12 @@ __all__ = [
     "Order",
     "OrderItem",
     "EmailVerification",
+    "PhoneVerification",
     "EmailEvent",
+    "SavedAddress",
+    "ModificationType",
+    "OrderItemModification",
+    "Cart",
+    "CartItem",
+    "CartItemModification",
 ]

@@ -1,0 +1,410 @@
+# APPETIT Backend - Production CI/CD Pipeline
+# Automated testing, building, and deployment to VPS
+
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # =============================================================================
+  # TESTING & QUALITY ASSURANCE
+  # =============================================================================
+  test:
+    name: Run Tests & Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: appetit_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-cov black flake8 safety bandit
+
+    - name: Code formatting check (Black)
+      run: black --check --diff app tests
+
+    - name: Linting check (Flake8)
+      run: flake8 app tests --max-line-length=100 --exclude=migrations
+
+    - name: Security check (Bandit)
+      run: bandit -r app -f json -o bandit-report.json || true
+
+    - name: Dependency security check (Safety)
+      run: safety check --json --output safety-report.json || true
+
+    - name: Set up test environment
+      run: |
+        cp .env.test.example .env
+        export DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5432/appetit_test
+        
+    - name: Run database migrations
+      run: |
+        export DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5432/appetit_test
+        alembic upgrade head
+
+    - name: Run tests with coverage
+      run: |
+        export DATABASE_URL=postgresql+psycopg://test_user:test_password@localhost:5432/appetit_test
+        pytest --cov=app --cov-report=xml --cov-report=html --junitxml=pytest-report.xml
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          pytest-report.xml
+          htmlcov/
+          bandit-report.json
+          safety-report.json
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  # =============================================================================
+  # DOCKER BUILD & SECURITY SCAN
+  # =============================================================================
+  build:
+    name: Build & Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        target: production
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          VCS_REF=${{ github.sha }}
+          VERSION=latest
+
+    - name: Output image
+      id: image
+      run: |
+        echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # =============================================================================
+  # DEPLOYMENT TO STAGING
+  # =============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.STAGING_HOST }}
+        username: ${{ secrets.STAGING_USER }}
+        key: ${{ secrets.STAGING_SSH_KEY }}
+        port: ${{ secrets.STAGING_SSH_PORT }}
+        script: |
+          cd /opt/appetit-staging
+          
+          # Pull latest code
+          git pull origin main
+          
+          # Update environment variables
+          echo "${{ secrets.STAGING_ENV_FILE }}" > .env.staging
+          
+          # Deploy with docker-compose
+          docker-compose -f docker-compose.staging.yml pull
+          docker-compose -f docker-compose.staging.yml up -d
+          
+          # Run migrations
+          docker-compose -f docker-compose.staging.yml exec -T app alembic upgrade head
+          
+          # Health check
+          sleep 30
+          curl -f http://localhost:8001/health || exit 1
+
+    - name: Run staging smoke tests
+      run: |
+        # Add smoke tests for staging environment
+        python -m pytest tests/smoke/ --base-url=${{ secrets.STAGING_URL }}
+
+  # =============================================================================
+  # DEPLOYMENT TO PRODUCTION
+  # =============================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create deployment directory structure
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_SSH_PORT }}
+        script: |
+          # Create directory structure
+          sudo mkdir -p /opt/appetit-prod/{nginx,ssl,logs,backups,monitoring}
+          sudo chown -R $USER:docker /opt/appetit-prod
+          
+          # Create backup of current deployment
+          if [ -d "/opt/appetit-prod/current" ]; then
+            sudo cp -r /opt/appetit-prod/current /opt/appetit-prod/backup-$(date +%Y%m%d-%H%M%S)
+          fi
+
+    - name: Copy deployment files
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_SSH_PORT }}
+        source: "docker-compose.prod.yml,nginx/,scripts/,monitoring/"
+        target: "/opt/appetit-prod/"
+
+    - name: Deploy to production server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_SSH_PORT }}
+        script: |
+          cd /opt/appetit-prod
+          
+          # Set up environment variables
+          echo "${{ secrets.PRODUCTION_ENV_FILE }}" > .env.prod
+          
+          # Set up Firebase credentials
+          echo "${{ secrets.FIREBASE_CREDENTIALS }}" > firebase-credentials.json
+          
+          # Pull latest Docker images
+          docker-compose -f docker-compose.prod.yml pull
+          
+          # Start services with zero-downtime deployment
+          docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+          
+          # Wait for services to be ready
+          sleep 60
+          
+          # Run database migrations
+          docker-compose -f docker-compose.prod.yml exec -T app alembic upgrade head
+          
+          # Health check
+          curl -f http://localhost:8000/health || exit 1
+          
+          # Clean up old images
+          docker image prune -f
+
+    - name: Run production smoke tests
+      run: |
+        # Wait for deployment to stabilize
+        sleep 120
+        
+        # Run comprehensive smoke tests
+        python -m pytest tests/smoke/ --base-url=${{ secrets.PRODUCTION_URL }}
+
+    - name: Setup monitoring and alerts
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_SSH_PORT }}
+        script: |
+          cd /opt/appetit-prod
+          
+          # Configure log rotation
+          sudo cp scripts/logrotate-appetit /etc/logrotate.d/appetit
+          
+          # Set up automated backups
+          sudo crontab -l > current_cron || true
+          echo "0 2 * * * /opt/appetit-prod/scripts/backup.sh" >> current_cron
+          sudo crontab current_cron
+          
+          # Start monitoring services
+          docker-compose -f docker-compose.prod.yml up -d prometheus grafana
+
+    - name: Notify deployment success
+      uses: 8398a7/action-slack@v3
+      if: success()
+      with:
+        status: success
+        channel: '#deployments'
+        text: '✅ APPETIT Backend successfully deployed to production!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Notify deployment failure
+      uses: 8398a7/action-slack@v3
+      if: failure()
+      with:
+        status: failure
+        channel: '#deployments'
+        text: '❌ APPETIT Backend deployment to production failed!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # =============================================================================
+  # ROLLBACK (Manual Trigger Only)
+  # =============================================================================
+  rollback:
+    name: Rollback Production Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'rollback'
+    environment: production
+    
+    steps:
+    - name: Rollback to previous version
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_SSH_PORT }}
+        script: |
+          cd /opt/appetit-prod
+          
+          # Find latest backup
+          LATEST_BACKUP=$(ls -t backup-* | head -n 1)
+          
+          if [ -n "$LATEST_BACKUP" ]; then
+            echo "Rolling back to: $LATEST_BACKUP"
+            
+            # Stop current services
+            docker-compose -f docker-compose.prod.yml down
+            
+            # Restore from backup
+            cp -r "$LATEST_BACKUP"/* ./
+            
+            # Start services
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Health check
+            sleep 60
+            curl -f http://localhost:8000/health || exit 1
+            
+            echo "Rollback completed successfully"
+          else
+            echo "No backup found for rollback"
+            exit 1
+          fi

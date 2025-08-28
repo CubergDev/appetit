@@ -9,19 +9,21 @@ class CartItem(BaseModel):
 
 class PromoValidateRequest(BaseModel):
     code: Optional[str] = None
-    cart: List[CartItem]
+    cart: Optional[List[CartItem]] = None
+    subtotal: Optional[float] = None
 
 
 class PromoValidateResponse(BaseModel):
     valid: bool
     discount: float
     reason: Optional[str] = None
+    promocode: Optional[dict] = None
 
 
 class PriceRequest(BaseModel):
     items: List[CartItem]
     promocode: Optional[str] = None
-    fulfillment: str  # delivery|pickup
+    fulfillment: Optional[str] = None  # delivery|pickup
     address: Optional[str] = None
 
 

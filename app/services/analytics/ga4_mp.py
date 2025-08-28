@@ -8,8 +8,8 @@ GA_ENDPOINT = "https://www.google-analytics.com/mp/collect"
 
 def health_check() -> Dict[str, str]:
     """Check GA4 Analytics integration health and configuration status."""
-    measurement_id = os.getenv("GA_MEASUREMENT_ID")
-    api_secret = os.getenv("GA_API_SECRET")
+    measurement_id = os.getenv("GA4_MEASUREMENT_ID")
+    api_secret = os.getenv("GA4_API_SECRET")
     
     if not measurement_id:
         return {"status": "misconfigured", "reason": "missing_measurement_id"}
@@ -24,8 +24,8 @@ def health_check() -> Dict[str, str]:
 
 
 def send_event(name: str, client_id: str, params: Optional[Dict[str, Any]] = None):
-    measurement_id = os.getenv("GA_MEASUREMENT_ID")
-    api_secret = os.getenv("GA_API_SECRET")
+    measurement_id = os.getenv("GA4_MEASUREMENT_ID")
+    api_secret = os.getenv("GA4_API_SECRET")
     if not measurement_id or not api_secret:
         return {"status": "skipped", "reason": "ga4_not_configured"}
     payload = {

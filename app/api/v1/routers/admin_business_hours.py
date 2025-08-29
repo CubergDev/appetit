@@ -14,14 +14,14 @@ router = APIRouter(prefix="/admin/business-hours", tags=["admin"])
 
 
 class BusinessHoursUpdate(BaseModel):
-    """Schema for updating business hours for a specific day."""
+    """schema for updating business hours for a specific day."""
     open_time: Optional[str] = Field(None, description="Opening time in HH:MM format", pattern="^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
     close_time: Optional[str] = Field(None, description="Closing time in HH:MM format", pattern="^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
     is_closed: Optional[bool] = Field(None, description="Whether the business is closed on this day")
 
 
 class BusinessHoursStatus(BaseModel):
-    """Schema for business hours status response."""
+    """schema for business hours status response."""
     is_open: bool = Field(..., description="Whether the business is currently open")
     current_time: str = Field(..., description="Current time in business timezone")
     reason: Optional[str] = Field(None, description="Reason if closed")
@@ -29,7 +29,7 @@ class BusinessHoursStatus(BaseModel):
 
 
 class WeeklyHoursUpdate(BaseModel):
-    """Schema for updating all weekly business hours."""
+    """schema for updating all weekly business hours."""
     monday: Optional[BusinessHoursUpdate] = None
     tuesday: Optional[BusinessHoursUpdate] = None
     wednesday: Optional[BusinessHoursUpdate] = None
@@ -44,7 +44,7 @@ def get_business_status(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Get current business hours status."""
+    """get current business hours status."""
     validation_result = validate_business_hours()
     current_time = business_hours_service.get_current_time()
     
@@ -61,10 +61,10 @@ def get_weekly_hours(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Get weekly business hours configuration."""
+    """get weekly business hours config."""
     weekly_hours = business_hours_service.get_weekly_hours()
     
-    # Add current status
+    # add current status
     validation_result = validate_business_hours()
     current_time = business_hours_service.get_current_time()
     
@@ -86,7 +86,7 @@ def update_day_hours(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Update business hours for a specific day."""
+    """update business hours for a specific day."""
     day_mapping = {
         'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
         'friday': 4, 'saturday': 5, 'sunday': 6
@@ -97,7 +97,7 @@ def update_day_hours(
     
     weekday = day_mapping[day_name.lower()]
     
-    # Parse time strings to time objects
+    # parse time strings to time objects
     open_time = None
     close_time = None
     
@@ -115,16 +115,16 @@ def update_day_hours(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid close_time format. Use HH:MM")
     
-    # Validate that open_time is before close_time
+    # check that open_time is before close_time
     if open_time and close_time and open_time >= close_time:
         raise HTTPException(status_code=400, detail="Opening time must be before closing time")
     
-    # Update business hours
+    # update business hours
     current_hours = business_hours_service.get_hours_for_day(weekday)
     if not current_hours:
         raise HTTPException(status_code=500, detail="Failed to get current hours")
     
-    # Update only provided fields
+    # update only provided fields
     new_open_time = open_time if payload.open_time is not None else current_hours.open_time
     new_close_time = close_time if payload.close_time is not None else current_hours.close_time
     new_is_closed = payload.is_closed if payload.is_closed is not None else current_hours.is_closed
@@ -151,14 +151,14 @@ def update_weekly_hours(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Update business hours for the entire week."""
+    """update business hours for the entire week."""
     days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     updated_days = []
     
     for i, day_name in enumerate(days):
         day_update = getattr(payload, day_name)
         if day_update:
-            # Parse and validate times
+            # parse and check times
             open_time = None
             close_time = None
             
@@ -176,11 +176,11 @@ def update_weekly_hours(
                 except ValueError:
                     raise HTTPException(status_code=400, detail=f"Invalid close_time format for {day_name}. Use HH:MM")
             
-            # Validate that open_time is before close_time
+            # check that open_time is before close_time
             if open_time and close_time and open_time >= close_time:
                 raise HTTPException(status_code=400, detail=f"Opening time must be before closing time for {day_name}")
             
-            # Update business hours for this day
+            # update business hours for this day
             current_hours = business_hours_service.get_hours_for_day(i)
             if current_hours:
                 new_open_time = open_time if day_update.open_time is not None else current_hours.open_time
@@ -207,7 +207,7 @@ def emergency_close(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Emergency close - mark all days as closed."""
+    """emergency close - mark all days as closed."""
     for weekday in range(7):
         current_hours = business_hours_service.get_hours_for_day(weekday)
         if current_hours:
@@ -226,7 +226,7 @@ def emergency_open(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Emergency open - mark all days as open with default hours."""
+    """emergency open - mark all days as open with default hours."""
     for weekday in range(7):
         current_hours = business_hours_service.get_hours_for_day(weekday)
         if current_hours:

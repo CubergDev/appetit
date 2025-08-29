@@ -7,7 +7,8 @@ from app.schemas.maps import (
     AddressValidationResponse,
     AutocompleteRequest,
     AddressComponents,
-    GeocodedData
+    GeocodedData,
+    GeocodeRequest
 )
 from app.services.maps.google import (
     forward_geocode as svc_forward_geocode,
@@ -159,18 +160,24 @@ def quick_reverse_geocode(
 # legacy endpoints for backward compatibility
 @router.post("/autocomplete")
 def autocomplete_legacy(req: AutocompleteRequest):
-    """Legacy autocomplete endpoint. Consider using forward-geocode instead."""
+    """legacy autocomplete endpoint. Consider using forward-geocode instead."""
     # this would need to be implemented if the old autocomplete functionality is still needed
     return {"status": "deprecated", "message": "Use /forward-geocode for new implementations"}
 
 
 @router.get("/place")
 def place_legacy(place_id: str = Query(...), fields: str | None = Query(None), lang: str | None = Query(None)):
-    """Legacy place details endpoint."""
+    """legacy place details endpoint."""
     return {"status": "deprecated", "message": "Use /forward-geocode and /reverse-geocode for new implementations"}
 
 
 @router.get("/geocode")
 def geocode_legacy(address: str = Query(...), lang: str | None = Query(None)):
-    """Legacy geocode endpoint. Use /forward-geocode instead."""
+    """legacy geocode endpoint. Use /forward-geocode instead."""
     return svc_geocode_legacy(address=address, lang=lang)
+
+
+@router.post("/geocode")
+def geocode_legacy_post(req: GeocodeRequest):
+    """legacy geocode endpoint supporting POST requests. Use /forward-geocode instead."""
+    return svc_geocode_legacy(address=req.address, lang=req.lang)

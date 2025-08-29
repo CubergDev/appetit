@@ -25,7 +25,7 @@ def start_phone_verification(
     db: Session = Depends(get_db), 
     token: Optional[str] = Depends(optional_oauth2_scheme)
 ):
-    """Send OTP to phone number for verification using Twilio Verify API."""
+    """send OTP to phone number for verification using Twilio check API."""
     # determine target phone and user_id if available
     target_phone: Optional[str] = payload.phone
     user_id: Optional[int] = None
@@ -47,13 +47,13 @@ def start_phone_verification(
     if not target_phone:
         raise HTTPException(status_code=400, detail="Phone number is required")
     
-    # Format phone number
+    # format phone number
     formatted_phone = format_phone_number(target_phone)
     
-    # Start verification using Twilio Verify API
+    # start verification using Twilio check API
     result = start_verification(formatted_phone, channel="sms")
     
-    # Handle verification start result
+    # handle verification start result
     if result["status"] == "error":
         if result["reason"] == "twilio_api_error":
             raise HTTPException(status_code=400, detail=f"SMS verification failed: {result['error']}")
@@ -64,10 +64,10 @@ def start_phone_verification(
     elif result["status"] == "skipped":
         raise HTTPException(status_code=500, detail="SMS verification service not available")
     
-    # Optionally store a minimal record for tracking purposes (without storing codes)
-    # This is useful for linking verified phone numbers to users later
+    # optionally store a minimal record for tracking purposes (without storing codes)
+    # this is useful for linking verified phone numbers to users later
     if user_id:
-        # Check if we already have a record for this user/phone combination
+        # check if we already have a record for this user/phone combination
         existing_pv = (
             db.query(models.PhoneVerification)
             .filter(
@@ -78,7 +78,7 @@ def start_phone_verification(
             .first()
         )
         if not existing_pv:
-            # Create a minimal tracking record (Twilio handles the actual verification)
+            # create a minimal tracking record (Twilio handles the actual verification)
             pv = models.PhoneVerification(
                 user_id=user_id,
                 phone=formatted_phone,
@@ -95,13 +95,13 @@ def start_phone_verification(
 
 @router.post("/verify-code", response_model=PhoneVerifyResponse)
 def verify_phone_code(payload: PhoneVerifyCodeRequest, db: Session = Depends(get_db)):
-    """Verify OTP code for phone number using Twilio Verify API."""
+    """check OTP code for phone number using Twilio check API."""
     formatted_phone = format_phone_number(payload.phone)
     
-    # Use Twilio Verify API to check the code
+    # use Twilio check API to check the code
     result = check_verification(formatted_phone, payload.code)
     
-    # Handle verification check result
+    # handle verification check result
     if result["status"] == "error":
         if result["reason"] == "twilio_api_error":
             raise HTTPException(status_code=400, detail=f"Code verification failed: {result['error']}")
@@ -112,18 +112,18 @@ def verify_phone_code(payload: PhoneVerifyCodeRequest, db: Session = Depends(get
     elif result["status"] == "skipped":
         raise HTTPException(status_code=500, detail="Code verification service not available")
     
-    # Check if the verification was successful
+    # check if the verification was successful
     if not result.get("valid", False):
         raise HTTPException(status_code=400, detail="Invalid or expired code")
     
-    # Mark user phone as verified if user exists
+    # mark user phone as verified if user exists
     user = db.query(models.User).filter(models.User.phone == formatted_phone).first()
     if user:
         user.is_phone_verified = True
         db.add(user)
         db.commit()
     
-    # Mark any existing tracking records as used
+    # mark any existing tracking records as used
     existing_pv = (
         db.query(models.PhoneVerification)
         .filter(
@@ -142,13 +142,13 @@ def verify_phone_code(payload: PhoneVerifyCodeRequest, db: Session = Depends(get
 
 @router.post("/login", response_model=TokenResponse)
 def login_with_phone_otp(payload: PhoneLoginRequest, db: Session = Depends(get_db)):
-    """Login using phone number and OTP code via Twilio Verify API."""
+    """login using phone number and OTP code via Twilio check API."""
     formatted_phone = format_phone_number(payload.phone)
     
-    # Use Twilio Verify API to check the code
+    # use Twilio check API to check the code
     result = check_verification(formatted_phone, payload.code)
     
-    # Handle verification check result
+    # handle verification check result
     if result["status"] == "error":
         if result["reason"] == "twilio_api_error":
             raise HTTPException(status_code=400, detail=f"Code verification failed: {result['error']}")
@@ -159,20 +159,20 @@ def login_with_phone_otp(payload: PhoneLoginRequest, db: Session = Depends(get_d
     elif result["status"] == "skipped":
         raise HTTPException(status_code=500, detail="Code verification service not available")
     
-    # Check if the verification was successful
+    # check if the verification was successful
     if not result.get("valid", False):
         raise HTTPException(status_code=400, detail="Invalid or expired code")
     
-    # Find user by phone number
+    # find user by phone number
     user = db.query(models.User).filter(models.User.phone == formatted_phone).first()
     if not user:
         raise HTTPException(status_code=404, detail="No account found with this phone number")
     
-    # Mark user phone as verified
+    # mark user phone as verified
     user.is_phone_verified = True
     db.add(user)
     
-    # Mark any existing tracking records as used
+    # mark any existing tracking records as used
     existing_pv = (
         db.query(models.PhoneVerification)
         .filter(
@@ -187,6 +187,6 @@ def login_with_phone_otp(payload: PhoneLoginRequest, db: Session = Depends(get_d
     
     db.commit()
     
-    # Generate access token
+    # generate access token
     token = create_access_token(subject=str(user.id), role=user.role)
     return TokenResponse(access_token=token, user=user)

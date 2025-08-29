@@ -1,1 +1,1 @@
-"""Locale service package."""
+"""locale service package."""

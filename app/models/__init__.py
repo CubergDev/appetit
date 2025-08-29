@@ -16,6 +16,7 @@ from .models import (
     Cart,
     CartItem,
     CartItemModification,
+    Banner,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "Cart",
     "CartItem",
     "CartItemModification",
+    "Banner",
 ]

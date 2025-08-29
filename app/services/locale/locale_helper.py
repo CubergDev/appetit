@@ -19,37 +19,37 @@ def get_localized_text(translations: Optional[Dict[str, str]], locale: str, fall
     if not translations or not isinstance(translations, dict):
         return fallback_text
     
-    # Try exact locale match
+    # try exact locale match
     if locale in translations:
         return translations[locale]
     
-    # Try fallback locales in order of preference
+    # try fallback locales in order of preference
     fallback_locales = ["en", "ru", "kz"]
     for fallback_locale in fallback_locales:
         if fallback_locale in translations:
             return translations[fallback_locale]
     
-    # If no translations found, return fallback text
+    # if no translations found, return fallback text
     return fallback_text
 
 
 def get_localized_category_name(category, locale: str) -> str:
-    """Get localized category name with fallback to original name."""
+    """get localized category name with fallback to original name."""
     return get_localized_text(category.name_translations, locale, category.name) or category.name
 
 
 def get_localized_menu_item_name(menu_item, locale: str) -> str:
-    """Get localized menu item name with fallback to original name."""
+    """get localized menu item name with fallback to original name."""
     return get_localized_text(menu_item.name_translations, locale, menu_item.name) or menu_item.name
 
 
 def get_localized_menu_item_description(menu_item, locale: str) -> Optional[str]:
-    """Get localized menu item description with fallback to original description."""
+    """get localized menu item description with fallback to original description."""
     return get_localized_text(menu_item.description_translations, locale, menu_item.description)
 
 
 def get_localized_modification_type_name(modification_type, locale: str) -> str:
-    """Get localized modification type name with fallback to original name."""
+    """get localized modification type name with fallback to original name."""
     return get_localized_text(modification_type.name_translations, locale, modification_type.name) or modification_type.name
 
 
@@ -66,7 +66,7 @@ def populate_translation_field(current_text: Optional[str], existing_translation
     """
     translations = existing_translations.copy() if existing_translations else {}
     
-    # Set English as default if not already set and current_text is available
+    # set English as default if not already set and current_text is available
     if current_text and "en" not in translations:
         translations["en"] = current_text
     

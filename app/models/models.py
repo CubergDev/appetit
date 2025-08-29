@@ -1,8 +1,11 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Numeric, Text, Float, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Numeric, Text, Float, UniqueConstraint, JSON, func
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.db.base import Base
+
+# helper function for default timestamps
+now = func.now()
 
 
 # helpers
@@ -60,6 +63,7 @@ class Device(Base):
     platform: Mapped[str] = mapped_column(String(16))  # android|ios|web
     fcm_token: Mapped[str] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     user: Mapped[User | None] = relationship("User", back_populates="devices")
 
@@ -69,8 +73,11 @@ class Category(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     name_translations: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"en": "English", "ru": "Russian", "kz": "Kazakh"}
     sort: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
@@ -89,6 +96,7 @@ class MenuItem(Base):
     price: Mapped[float] = mapped_column(Numeric(10, 2))
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     external_pos_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
@@ -100,17 +108,76 @@ class MenuItem(Base):
 class Promocode(Base):
     __tablename__ = "promocodes"
 
-    code: Mapped[str] = mapped_column(String(64), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16))  # percent|amount
-    value: Mapped[float] = mapped_column(Numeric(10, 2))
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-    valid_from: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    valid_to: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    max_redemptions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="percent")  # percent|amount
+    discount_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)  # From migration
+    value: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    min_order_amount: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)  # From migration
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)  # From migration
+    current_uses: Mapped[int] = mapped_column(Integer, default=0)  # From migration
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # From migration
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # From migration
     per_user_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    min_subtotal: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    # --- Backward-compatible alias properties ---
+    # active <-> is_active
+    @property
+    def active(self) -> bool:
+        return self.is_active
+
+    @active.setter
+    def active(self, value: bool) -> None:
+        self.is_active = bool(value)
+
+    # used_count -> current_uses
+    @property
+    def used_count(self) -> int:
+        return self.current_uses
+
+    @used_count.setter
+    def used_count(self, value: int) -> None:
+        self.current_uses = int(value) if value is not None else 0
+
+    # max_redemptions <-> max_uses
+    @property
+    def max_redemptions(self) -> int | None:
+        return self.max_uses
+
+    @max_redemptions.setter
+    def max_redemptions(self, value: int | None) -> None:
+        self.max_uses = value if value is None else int(value)
+
+    # min_subtotal <-> min_order_amount
+    @property
+    def min_subtotal(self) -> float | None:
+        return float(self.min_order_amount) if self.min_order_amount is not None else None
+
+    @min_subtotal.setter
+    def min_subtotal(self, value: float | None) -> None:
+        self.min_order_amount = value if value is None else float(value)
+
+    # valid_to <-> expires_at
+    @property
+    def valid_to(self):
+        return self.expires_at
+
+    @valid_to.setter
+    def valid_to(self, value) -> None:
+        self.expires_at = value
+
+    # valid_from placeholder (not persisted in current schema)
+    @property
+    def valid_from(self):
+        return None
+
+    @valid_from.setter
+    def valid_from(self, value) -> None:
+        # No-op to accept incoming payloads without breaking
+        pass
 
     orders: Mapped[list["Order"]] = relationship("Order", back_populates="promocode")
 
@@ -124,6 +191,7 @@ class PromoBatch(Base):
     count: Mapped[int] = mapped_column(Integer)
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
 class Order(Base):
@@ -135,15 +203,17 @@ class Order(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     number: Mapped[str] = mapped_column(String(32), unique=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    fulfillment: Mapped[str] = mapped_column(String(16))  # delivery|pickup
+    pickup_or_delivery: Mapped[str] = mapped_column(String(16))  # delivery|pickup
     address_text: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="NEW")  # NEW|COOKING|ON_WAY|DELIVERED|CANCELLED
     subtotal: Mapped[float] = mapped_column(Numeric(10, 2))
     discount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     total: Mapped[float] = mapped_column(Numeric(10, 2))
-    promocode_code: Mapped[str | None] = mapped_column(ForeignKey("promocodes.code"), nullable=True)
+    promocode_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    promocode_id: Mapped[int | None] = mapped_column(ForeignKey("promocodes.id"), nullable=True)
     paid: Mapped[bool] = mapped_column(Boolean, default=False)
     payment_method: Mapped[str] = mapped_column(String(16), default="cod")  # cod|online
     utm_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -151,6 +221,7 @@ class Order(Base):
     utm_campaign: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ga_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
     external_pos_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="orders")
@@ -167,6 +238,8 @@ class OrderItem(Base):
     name_snapshot: Mapped[str] = mapped_column(String(255))
     qty: Mapped[int] = mapped_column(Integer)
     price_at_moment: Mapped[float] = mapped_column(Numeric(10, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     order: Mapped[Order] = relationship("Order", back_populates="items")
     menu_item: Mapped[MenuItem | None] = relationship("MenuItem", back_populates="order_items")
@@ -186,6 +259,7 @@ class EmailVerification(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     user: Mapped[User | None] = relationship("User", back_populates="email_verifications")
 
@@ -201,6 +275,7 @@ class PhoneVerification(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     user: Mapped[User | None] = relationship("User", back_populates="phone_verifications")
 
@@ -217,6 +292,7 @@ class EmailEvent(Base):
     link: Mapped[str | None] = mapped_column(String(1024), nullable=True)  # For click events
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Additional event data
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
 class ModificationType(Base):
@@ -242,6 +318,7 @@ class OrderItemModification(Base):
     modification_type_id: Mapped[int] = mapped_column(ForeignKey("modification_types.id", ondelete="CASCADE"))
     action: Mapped[str] = mapped_column(String(16))  # 'add' or 'remove'
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     order_item: Mapped[OrderItem] = relationship("OrderItem", back_populates="modifications")
     modification_type: Mapped[ModificationType] = relationship("ModificationType", back_populates="modifications")
@@ -271,6 +348,7 @@ class CartItem(Base):
 
     cart: Mapped[Cart] = relationship("Cart", back_populates="items")
     menu_item: Mapped[MenuItem] = relationship("MenuItem")
+    modifications: Mapped[list["CartItemModification"]] = relationship("CartItemModification", back_populates="cart_item", cascade="all, delete-orphan")
 
 
 class CartItemModification(Base):
@@ -281,6 +359,7 @@ class CartItemModification(Base):
     modification_type_id: Mapped[int] = mapped_column(ForeignKey("modification_types.id", ondelete="CASCADE"))
     action: Mapped[str] = mapped_column(String(16))  # 'add' or 'remove'
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
     cart_item: Mapped[CartItem] = relationship("CartItem", back_populates="modifications")
     modification_type: Mapped[ModificationType] = relationship("ModificationType")
@@ -307,7 +386,7 @@ class Banner(Base):
     creator: Mapped[User] = relationship("User")
 
 
-# Update CartItem to include modifications relationship
+# update CartItem to include modifications relationship
 CartItem.modifications = relationship("CartItemModification", back_populates="cart_item", cascade="all, delete-orphan")
 
 

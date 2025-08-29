@@ -15,7 +15,7 @@ def _build_engine():
     if url.startswith("sqlite"):
         raise RuntimeError("SQLite is not supported. Please configure PostgreSQL via DATABASE_URL or DB_* settings.")
 
-    # PostgreSQL specific configuration with secure connection pooling
+    # postgreSQL specific config with secure connection pooling
     engine_kwargs.update({
         "pool_size": settings.DB_POOL_SIZE,
         "max_overflow": settings.DB_MAX_OVERFLOW,
@@ -35,14 +35,14 @@ engine = _build_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
-# FastAPI dependency
+# fastAPI dependency
 from contextlib import contextmanager
 from typing import Iterator
 
 
 @contextmanager
 def session_scope() -> Iterator["Session"]:
-    """Provide a transactional scope around a series of operations."""
+    """provide a transactional scope around a series of operations."""
     db = SessionLocal()
     try:
         yield db

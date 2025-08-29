@@ -15,7 +15,7 @@ def _env_key(platform: str, key: str) -> str:
 
 
 def get_stream_config(platform: str) -> Dict[str, Optional[str]]:
-    """Return measurement_id/api_secret for platform, plus validation info."""
+    """return measurement_id/api_secret for platform, plus validation info."""
     plat = (platform or "").lower()
     if plat not in SUPPORTED_PLATFORMS:
         return {"status": "invalid_platform", "platform": platform}

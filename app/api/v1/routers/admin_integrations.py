@@ -8,13 +8,14 @@ router = APIRouter(prefix="/admin/integrations", tags=["admin"])
 
 @router.get("/status")
 def get_integrations_status(_: models.User = Depends(require_admin)):
-    """Get status of all integrations for admin monitoring."""
+    """get status of all integrations for admin monitoring."""
     from app.services.email.email_sender import health_check as email_health
     from app.services.push.fcm_admin import health_check as push_health
     from app.services.sms.twilio_sender import health_check as sms_health
     from app.services.maps.google import health_check as maps_health
     from app.services.analytics.ga4_mp import health_check as ga4_health
     from app.services.analytics.ga4_streams import health_check_all as ga4_streams_health
+    from app.services.analytics.ga4_data import health_check as ga4_data_health
     from app.services.pos.factory import get_pos_adapter
     from app.services.payments.mock import MockPayments
     
@@ -26,6 +27,7 @@ def get_integrations_status(_: models.User = Depends(require_admin)):
         "maps": maps_health(),
         "analytics": ga4_health(),
         "analytics_streams": ga4_streams_health(),
+        "analytics_data": ga4_data_health(),
         "pos": {
             "status": "configured",
             "provider": "mock",
@@ -54,7 +56,7 @@ def get_integrations_status(_: models.User = Depends(require_admin)):
 
 @router.get("/ga4/health")
 def ga4_health(_: models.User = Depends(require_admin)):
-    """Return health status for GA4 streams (android, ios, web)."""
+    """return health status for GA4 streams (android, ios, web)."""
     from app.services.analytics.ga4_streams import health_check_all
     return health_check_all()
 
@@ -66,7 +68,7 @@ def ga4_test_event(
     client_id: Optional[str] = Query(None),
     _: models.User = Depends(require_admin),
 ):
-    """Send a GA4 test event to a specific platform stream or all streams."""
+    """send a GA4 test event to a specific platform stream or all streams."""
     from datetime import datetime
     from app.services.analytics.ga4_streams import send_platform_event, SUPPORTED_PLATFORMS
 
@@ -85,3 +87,56 @@ def ga4_test_event(
 
     result = send_platform_event(plat, event_name, client_id=client_id or f"admin-test-{plat}", params={"source": "admin"})
     return {"status": "ok", "sent_at": sent_at, "platform": plat, "result": result}
+
+
+@router.get("/ga4-data/health")
+def ga4_data_health(_: models.User = Depends(require_admin)):
+    """Check GA4 Data API health and configuration."""
+    from app.services.analytics.ga4_data import health_check
+    return health_check()
+
+
+@router.get("/ga4-data/sessions")
+def ga4_data_sessions(
+    start_date: str = Query("30daysAgo", description="Start date (e.g., '30daysAgo', '2023-01-01')"),
+    end_date: str = Query("yesterday", description="End date (e.g., 'yesterday', '2023-01-31')"),
+    _: models.User = Depends(require_admin),
+):
+    """Get sessions and users data from GA4."""
+    from app.services.analytics.ga4_data import get_sessions_and_users
+    return get_sessions_and_users(start_date, end_date)
+
+
+@router.get("/ga4-data/traffic-sources")
+def ga4_data_traffic_sources(
+    start_date: str = Query("30daysAgo", description="Start date (e.g., '30daysAgo', '2023-01-01')"),
+    end_date: str = Query("yesterday", description="End date (e.g., 'yesterday', '2023-01-31')"),
+    limit: int = Query(10, description="Maximum number of sources to return"),
+    _: models.User = Depends(require_admin),
+):
+    """Get traffic sources data from GA4."""
+    from app.services.analytics.ga4_data import get_traffic_sources
+    return get_traffic_sources(start_date, end_date, limit)
+
+
+@router.get("/ga4-data/events")
+def ga4_data_events(
+    start_date: str = Query("30daysAgo", description="Start date (e.g., '30daysAgo', '2023-01-01')"),
+    end_date: str = Query("yesterday", description="End date (e.g., 'yesterday', '2023-01-31')"),
+    limit: int = Query(20, description="Maximum number of events to return"),
+    _: models.User = Depends(require_admin),
+):
+    """Get events data from GA4."""
+    from app.services.analytics.ga4_data import get_events_data
+    return get_events_data(start_date, end_date, limit)
+
+
+@router.get("/ga4-data/devices")
+def ga4_data_devices(
+    start_date: str = Query("30daysAgo", description="Start date (e.g., '30daysAgo', '2023-01-01')"),
+    end_date: str = Query("yesterday", description="End date (e.g., 'yesterday', '2023-01-31')"),
+    _: models.User = Depends(require_admin),
+):
+    """Get device and platform analytics from GA4."""
+    from app.services.analytics.ga4_data import get_device_analytics
+    return get_device_analytics(start_date, end_date)

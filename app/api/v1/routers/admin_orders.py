@@ -73,7 +73,7 @@ def update_order_status(order_id: int, payload: StatusUpdateRequest, db: Session
     db.refresh(order)
     _ = order.items
     
-    # Send notifications to customer about status change
+    # send notifications to customer about status change
     if old_status != payload.status and order.user:
         status_messages = {
             "NEW": "принят",
@@ -87,7 +87,7 @@ def update_order_status(order_id: int, payload: StatusUpdateRequest, db: Session
         title = "Статус заказа изменен"
         body = f"Заказ #{order.number} {status_text}"
         
-        # Send push notifications to all user's devices
+        # send push notifications to all user's devices
         for device in order.user.devices:
             try:
                 send_to_token(device.fcm_token, title=title, body=body, data={
@@ -97,20 +97,20 @@ def update_order_status(order_id: int, payload: StatusUpdateRequest, db: Session
                     "type": "order_status_update"
                 })
             except Exception as e:
-                # Log error but don't fail the request
+                # log error but don't fail the request
                 print(f"Failed to send push notification to device {device.id}: {e}")
         
-        # Send email notifications (best-effort)
+        # send email notifications (best-effort)
         if order.user.email:
             try:
                 if payload.status == "DELIVERED":
-                    # Special email for delivered orders with rating request
+                    # special email for delivered orders with rating request
                     send_order_delivered(to=order.user.email, order=order, user_id=order.user.id)
                 else:
-                    # General status update email
+                    # general status update email
                     send_order_status(to=order.user.email, order=order, status=status_text, user_id=order.user.id)
             except Exception as e:
-                # Log error but don't fail the request
+                # log error but don't fail the request
                 print(f"Failed to send email notification: {e}")
     
     return order
@@ -118,22 +118,22 @@ def update_order_status(order_id: int, payload: StatusUpdateRequest, db: Session
 
 @router.put("/{order_id}", response_model=OrderOut)
 def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
-    """Full order update (Admin only)"""
+    """full order update (Admin only)"""
     order = db.get(models.Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Update fields if provided
+    # update fields if provided
     old_status = order.status
     if payload.status is not None:
         if payload.status not in ALLOWED_STATUSES:
             raise HTTPException(status_code=400, detail="Invalid status")
         order.status = payload.status
     
-    if payload.fulfillment is not None:
-        if payload.fulfillment not in ["delivery", "pickup"]:
+    if payload.pickup_or_delivery is not None:
+        if payload.pickup_or_delivery not in ["delivery", "pickup"]:
             raise HTTPException(status_code=400, detail="Invalid fulfillment method")
-        order.fulfillment = payload.fulfillment
+        order.pickup_or_delivery = payload.pickup_or_delivery
     
     if payload.address_text is not None:
         order.address_text = payload.address_text
@@ -155,7 +155,7 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
     db.refresh(order)
     _ = order.items
     
-    # Send notifications if status was changed
+    # send notifications if status was changed
     if payload.status is not None and old_status != payload.status and order.user:
         status_messages = {
             "NEW": "принят",
@@ -169,7 +169,7 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
         title = "Статус заказа изменен"
         body = f"Заказ #{order.number} {status_text}"
         
-        # Send push notifications to all user's devices
+        # send push notifications to all user's devices
         for device in order.user.devices:
             try:
                 send_to_token(device.fcm_token, title=title, body=body, data={
@@ -179,20 +179,20 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
                     "type": "order_status_update"
                 })
             except Exception as e:
-                # Log error but don't fail the request
+                # log error but don't fail the request
                 print(f"Failed to send push notification to device {device.id}: {e}")
         
-        # Send email notifications (best-effort)
+        # send email notifications (best-effort)
         if order.user.email:
             try:
                 if payload.status == "DELIVERED":
-                    # Special email for delivered orders with rating request
+                    # special email for delivered orders with rating request
                     send_order_delivered(to=order.user.email, order=order, user_id=order.user.id)
                 else:
-                    # General status update email
+                    # general status update email
                     send_order_status(to=order.user.email, order=order, status=status_text, user_id=order.user.id)
             except Exception as e:
-                # Log error but don't fail the request
+                # log error but don't fail the request
                 print(f"Failed to send email notification: {e}")
     
     return order
@@ -200,22 +200,22 @@ def update_order(order_id: int, payload: OrderUpdate, db: Session = Depends(get_
 
 @router.delete("/{order_id}")
 def delete_order(order_id: int, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
-    """Delete an order (Admin only)"""
+    """delete an order (Admin only)"""
     order = db.get(models.Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Delete related order items and their modifications first
+    # delete related order items and their modifications first
     for item in order.items:
-        # Delete order item modifications
+        # delete order item modifications
         db.query(models.OrderItemModification).filter(
             models.OrderItemModification.order_item_id == item.id
         ).delete()
     
-    # Delete order items
+    # delete order items
     db.query(models.OrderItem).filter(models.OrderItem.order_id == order_id).delete()
     
-    # Delete the order
+    # delete the order
     db.delete(order)
     db.commit()
     return {"message": "Order deleted successfully"}

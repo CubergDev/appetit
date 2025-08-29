@@ -20,7 +20,13 @@ from app.api.v1.routers import admin_push as admin_push_router
 from app.api.v1.routers import admin_banners as admin_banners_router
 from app.api.v1.routers import admin_business_hours as admin_business_hours_router
 from app.api.v1.routers import admin_integrations as admin_integrations_router
+from app.api.v1.routers import admin_localizations as admin_localizations_router
+from app.api.v1.routers import admin_users as admin_users_router
 from app.api.v1.routers import webhooks_resend as webhooks_resend_router
+
+# role-based routes
+from app.api.v1.routers import manager as manager_router
+from app.api.v1.routers import courier as courier_router
 
 router = APIRouter()
 
@@ -50,3 +56,9 @@ router.include_router(admin_push_router.router)
 router.include_router(admin_banners_router.router)
 router.include_router(admin_business_hours_router.router)
 router.include_router(admin_integrations_router.router)
+router.include_router(admin_localizations_router.router)
+router.include_router(admin_users_router.router)
+
+# role-based routes
+router.include_router(manager_router.router)
+router.include_router(courier_router.router)

@@ -61,3 +61,24 @@ def require_admin(user: models.User = Depends(get_current_user)) -> models.User:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     return user
+
+
+def require_admin_only(user: models.User = Depends(get_current_user)) -> models.User:
+    """Require admin role exclusively - no other roles allowed"""
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only access required")
+    return user
+
+
+def require_manager(user: models.User = Depends(get_current_user)) -> models.User:
+    """Require manager or admin role - managers can access marketing, promo, menu, analytics"""
+    if user.role not in ["admin", "manager"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
+    return user
+
+
+def require_courier(user: models.User = Depends(get_current_user)) -> models.User:
+    """Require courier, manager, or admin role - couriers can manage orders and deliveries"""
+    if user.role not in ["admin", "manager", "courier"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Courier access required")
+    return user

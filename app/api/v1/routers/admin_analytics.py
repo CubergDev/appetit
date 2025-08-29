@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, or_, distinct
 
-from app.core.security import require_admin
+from app.core.security import require_manager, require_admin
 from app.db.session import get_db
 from app import models
 
@@ -17,9 +17,9 @@ def summary(
     from_: Optional[str] = Query(None, alias="from"),
     to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    # Parse date filters (gracefully ignore invalid)
+    # parse date filters (gracefully ignore invalid)
     dt_from = None
     dt_to = None
     if from_:
@@ -45,10 +45,10 @@ def summary(
 
     avg_order_value = round(total_revenue / total_orders, 2) if total_orders else 0.0
 
-    # Users
+    # users
     total_users = db.query(models.User).filter(models.User.role == "user").count()
 
-    # Active users: distinct users with orders in selected range; if no range, last 30 days
+    # active users: distinct users with orders in selected range; if no range, last 30 days
     active_q = db.query(models.Order.user_id).filter(models.Order.user_id.isnot(None))
     if dt_from or dt_to:
         if dt_from:
@@ -59,7 +59,7 @@ def summary(
         active_q = active_q.filter(models.Order.created_at >= datetime.utcnow() - timedelta(days=30))
     active_users = active_q.distinct().count()
 
-    # Today stats (UTC)
+    # today stats (UTC)
     start_today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     end_today = start_today + timedelta(days=1)
     today_q = db.query(models.Order).filter(models.Order.created_at >= start_today, models.Order.created_at < end_today)
@@ -83,11 +83,11 @@ def orders_by_period(
     from_: Optional[str] = Query(None, alias="from"),
     to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Orders aggregated by period. Returns a list for compatibility with SQLite in tests."""
+    """orders aggregated by period. Returns a list for compatibility with SQLite in tests."""
 
-    # Parse dates (gracefully ignore invalid)
+    # parse dates (gracefully ignore invalid)
     dt_from = None
     dt_to = None
     if from_:
@@ -101,7 +101,7 @@ def orders_by_period(
         except Exception:
             dt_to = None
 
-    # Fetch minimal fields to aggregate in Python (cross-DB)
+    # fetch minimal fields to aggregate in Python (cross-DB)
     q = db.query(models.Order.created_at, models.Order.total)
     if dt_from:
         q = q.filter(models.Order.created_at >= dt_from)
@@ -110,7 +110,7 @@ def orders_by_period(
 
     rows = q.all()
 
-    # Grouping helpers
+    # grouping helpers
     from collections import defaultdict
     buckets = defaultdict(lambda: {"orders_count": 0, "total_revenue": 0.0})
 
@@ -131,7 +131,7 @@ def orders_by_period(
         buckets[key]["orders_count"] += 1
         buckets[key]["total_revenue"] += float(total or 0)
 
-    # Build sorted list by period key (lexicographic works for our formatted keys)
+    # build sorted list by period key (lexicographic works for our formatted keys)
     data = []
     for key in sorted(buckets.keys()):
         orders_count = buckets[key]["orders_count"]
@@ -152,11 +152,11 @@ def order_sources(
     from_: Optional[str] = Query(None, alias="from"),
     to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Order sources grouped by fulfillment type (delivery/pickup/etc.). Returns a list for tests."""
+    """order sources grouped by fulfillment type (delivery/pickup/etc.). Returns a list for tests."""
 
-    # Parse dates
+    # parse dates
     dt_from = None
     dt_to = None
     if from_:
@@ -170,8 +170,8 @@ def order_sources(
         except Exception:
             dt_to = None
 
-    # Query minimal fields and aggregate in Python (SQLite friendly)
-    q = db.query(models.Order.fulfillment, models.Order.total, models.Order.created_at)
+    # query minimal fields and aggregate in Python (SQLite friendly)
+    q = db.query(models.Order.pickup_or_delivery, models.Order.total, models.Order.created_at)
     if dt_from:
         q = q.filter(models.Order.created_at >= dt_from)
     if dt_to:
@@ -182,21 +182,21 @@ def order_sources(
     from collections import defaultdict
     buckets = defaultdict(lambda: {"count": 0, "total": 0.0})
 
-    for fulfillment, total, _created_at in rows:
-        key = fulfillment or "unknown"
+    for pickup_or_delivery, total, _created_at in rows:
+        key = pickup_or_delivery or "unknown"
         buckets[key]["count"] += 1
         buckets[key]["total"] += float(total or 0)
 
     total_orders = sum(v["count"] for v in buckets.values())
 
-    # Build list with percentages
+    # build list with percentages
     result_list = []
     for key in sorted(buckets.keys()):
         count = buckets[key]["count"]
         total = buckets[key]["total"]
         percentage = round((count / total_orders) * 100, 2) if total_orders else 0.0
         result_list.append({
-            "fulfillment": key,
+            "pickup_or_delivery": key,
             "count": int(count),
             "total": round(total, 2),
             "percentage": percentage,
@@ -210,11 +210,11 @@ def utm_sources(
     from_: Optional[str] = Query(None, alias="from"),
     to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """UTM source analytics - orders and revenue grouped by traffic sources."""
+    """uTM source analytics - orders and revenue grouped by traffic sources."""
 
-    # Parse dates
+    # parse dates
     dt_from = None
     dt_to = None
     if from_:
@@ -228,7 +228,7 @@ def utm_sources(
         except Exception:
             dt_to = None
 
-    # Query UTM fields, total, and created_at
+    # query UTM fields, total, and created_at
     q = db.query(
         models.Order.utm_source, 
         models.Order.utm_medium, 
@@ -250,7 +250,7 @@ def utm_sources(
     total_revenue = 0.0
 
     for utm_source, utm_medium, utm_campaign, total, _created_at in rows:
-        # Create source key - prioritize utm_source, fallback to "direct"
+        # create source key - prioritize utm_source, fallback to "direct"
         source_key = utm_source or "direct"
         
         utm_buckets[source_key]["count"] += 1
@@ -258,11 +258,11 @@ def utm_sources(
         utm_buckets[source_key]["total"] += revenue
         total_revenue += revenue
         
-        # Track campaigns for this source
+        # track campaigns for this source
         if utm_campaign:
             utm_buckets[source_key]["campaigns"].add(utm_campaign)
 
-    # Build result list
+    # build result list
     result_list = []
     for source_key in sorted(utm_buckets.keys()):
         bucket = utm_buckets[source_key]
@@ -285,7 +285,7 @@ def utm_sources(
             "campaign_count": len(campaigns),
         })
 
-    # Sort by revenue descending
+    # sort by revenue descending
     result_list.sort(key=lambda x: x["revenue"], reverse=True)
     
     return {
@@ -303,11 +303,11 @@ def repeat_customers(
     from_: Optional[str] = Query(None, alias="from"),
     to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Repeat customers analytics with customer segmentation. SQLite-friendly aggregation."""
+    """repeat customers analytics with customer segmentation. SQLite-friendly aggregation."""
 
-    # Parse dates
+    # parse dates
     dt_from = None
     dt_to = None
     if from_:
@@ -321,7 +321,7 @@ def repeat_customers(
         except Exception:
             dt_to = None
 
-    # Base query
+    # base query
     q = db.query(models.Order.user_id, models.Order.created_at)
     if dt_from:
         q = q.filter(models.Order.created_at >= dt_from)
@@ -345,7 +345,7 @@ def repeat_customers(
             "avg_orders_per_customer": 0.0,
         }
 
-    # Aggregate per registered user (ignore guests without user_id for segmentation)
+    # aggregate per registered user (ignore guests without user_id for segmentation)
     from collections import defaultdict
     counts_by_user = defaultdict(int)
     for user_id, _created_at in rows:
@@ -356,7 +356,7 @@ def repeat_customers(
     repeat_customers_cnt = sum(1 for c in counts_by_user.values() if c >= 2)
     new_customers = max(0, total_customers - repeat_customers_cnt)
 
-    # Orders breakdown
+    # orders breakdown
     repeat_orders = sum(max(0, c - 1) for c in counts_by_user.values())
     first_time_orders = total_orders - repeat_orders
 
@@ -389,12 +389,12 @@ def dish_popularity(
     order: str = Query("desc", description="asc|desc"),
     limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
     """Dish popularity aggregated from OrderItem + Order with filters and sorting.
     Returns list of items with qty, revenue and avg_price. SQLite-friendly (aggregates in Python).
     """
-    # Parse dates
+    # parse dates
     dt_from = None
     dt_to = None
     if from_:
@@ -408,13 +408,13 @@ def dish_popularity(
         except Exception:
             dt_to = None
 
-    # Minimal select and filter in DB
+    # minimal select and filter in DB
     q = db.query(
         models.OrderItem.item_id,
         models.OrderItem.name_snapshot,
         models.OrderItem.qty,
         models.OrderItem.price_at_moment,
-        models.Order.fulfillment,
+        models.Order.pickup_or_delivery,
         models.Order.user_id,
         models.Order.created_at,
     ).join(models.Order, models.OrderItem.order_id == models.Order.id)
@@ -426,14 +426,14 @@ def dish_popularity(
     if user_id is not None:
         q = q.filter(models.Order.user_id == user_id)
     if type_ in {"delivery", "pickup"}:
-        q = q.filter(models.Order.fulfillment == type_)
+        q = q.filter(models.Order.pickup_or_delivery == type_)
 
     rows = q.all()
 
     from collections import defaultdict
     agg = defaultdict(lambda: {"qty": 0, "revenue": 0.0, "name": "", "item_id": None})
 
-    for item_id, name_snapshot, qty, price, _fulfillment, _uid, _created in rows:
+    for item_id, name_snapshot, qty, price, _pickup_or_delivery, _uid, _created in rows:
         key = item_id if item_id is not None else f"name:{name_snapshot}"  # fallback by name when item_id missing
         rec = agg[key]
         rec["item_id"] = item_id
@@ -443,7 +443,7 @@ def dish_popularity(
         rec["qty"] += qv
         rec["revenue"] += qv * pr
 
-    # Build list and compute avg price
+    # build list and compute avg price
     data = []
     for key, rec in agg.items():
         qty = rec["qty"]
@@ -457,7 +457,7 @@ def dish_popularity(
             "avg_price": avg_price,
         })
 
-    # Sorting
+    # sorting
     sort_key = {
         "qty": lambda x: x["qty"],
         "revenue": lambda x: x["revenue"],
@@ -482,7 +482,7 @@ def marketing_metrics(
     installs_ios: int = Query(0, ge=0),
     installs_web: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
     """Financial analytics (CPI, ROI, CPA) combining DB stats and provided marketing inputs.
     - Uses DB to compute orders_count and revenue in the given period.
@@ -491,7 +491,7 @@ def marketing_metrics(
     - Computes ROI as (revenue - spend)/spend; handles zero safely.
     - Placeholder for GA4 streams (android/ios/web) — future integration can replace proxies.
     """
-    # Parse dates
+    # parse dates
     dt_from = None
     dt_to = None
     if from_:
@@ -515,24 +515,24 @@ def marketing_metrics(
     orders_count = oq.count()
     revenue_total = float(oq.with_entities(func.coalesce(func.sum(models.Order.total), 0)).scalar() or 0.0)
 
-    # Helper safe divisions
+    # helper safe divisions
     def safe_div(num: float, den: float) -> float:
         try:
             return round(num / den, 4) if den else 0.0
         except Exception:
             return 0.0
 
-    # Per-platform CPI
+    # per-platform CPI
     cpi_android = safe_div(spend_android, installs_android)
     cpi_ios = safe_div(spend_ios, installs_ios)
     cpi_web = safe_div(spend_web, installs_web)
 
-    # Totals for spend/installs
+    # totals for spend/installs
     spend_total = float(spend_android + spend_ios + spend_web)
     installs_total = int(installs_android + installs_ios + installs_web)
     cpi_total = safe_div(spend_total, installs_total)
 
-    # CPA (proxy) and ROI based on DB totals
+    # cPA (proxy) and ROI based on DB totals
     cpa_total = safe_div(spend_total, orders_count)
     roi_total = safe_div((revenue_total - spend_total), spend_total)
 

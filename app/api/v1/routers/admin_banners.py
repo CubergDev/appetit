@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.security import require_admin
+from app.core.security import require_manager
 from app.db.session import get_db
 from app import models
 from app.schemas.admin import BannerCreate, BannerUpdate, BannerOut
@@ -16,15 +16,15 @@ router = APIRouter(prefix="/admin/banners", tags=["admin"])
 def list_banners(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """List all banners with optional filtering"""
+    """list all banners with optional filtering"""
     query = db.query(models.Banner)
     
     if is_active is not None:
         query = query.filter(models.Banner.is_active == is_active)
     
-    # Filter by date range - only show banners that are currently valid or have no date restrictions
+    # filter by date range - only show banners that are currently valid or have no date restrictions
     now = datetime.utcnow()
     query = query.filter(
         (models.Banner.start_date.is_(None) | (models.Banner.start_date <= now)) &
@@ -39,9 +39,9 @@ def list_banners(
 def list_all_banners(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """List all banners including expired ones (admin view)"""
+    """list all banners including expired ones (admin view)"""
     query = db.query(models.Banner)
     
     if is_active is not None:
@@ -55,9 +55,9 @@ def list_all_banners(
 def get_banner(
     banner_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Get a specific banner"""
+    """get a specific banner"""
     banner = db.get(models.Banner, banner_id)
     if not banner:
         raise HTTPException(status_code=404, detail="Banner not found")
@@ -68,9 +68,9 @@ def get_banner(
 def create_banner(
     payload: BannerCreate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(require_admin),
+    admin: models.User = Depends(require_manager),
 ):
-    """Create a new banner"""
+    """create a new banner"""
     banner_data = payload.dict()
     banner_data["created_by"] = admin.id
     
@@ -86,14 +86,14 @@ def update_banner(
     banner_id: int,
     payload: BannerUpdate,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Update a banner"""
+    """update a banner"""
     banner = db.get(models.Banner, banner_id)
     if not banner:
         raise HTTPException(status_code=404, detail="Banner not found")
     
-    # Update fields if provided
+    # update fields if provided
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(banner, key, value)
@@ -108,9 +108,9 @@ def update_banner(
 def delete_banner(
     banner_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Delete a banner"""
+    """delete a banner"""
     banner = db.get(models.Banner, banner_id)
     if not banner:
         raise HTTPException(status_code=404, detail="Banner not found")
@@ -124,9 +124,9 @@ def delete_banner(
 def activate_banner(
     banner_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Activate a banner"""
+    """activate a banner"""
     banner = db.get(models.Banner, banner_id)
     if not banner:
         raise HTTPException(status_code=404, detail="Banner not found")
@@ -141,9 +141,9 @@ def activate_banner(
 def deactivate_banner(
     banner_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Deactivate a banner"""
+    """deactivate a banner"""
     banner = db.get(models.Banner, banner_id)
     if not banner:
         raise HTTPException(status_code=404, detail="Banner not found")
@@ -158,18 +158,18 @@ def deactivate_banner(
 def reorder_banners(
     banner_order: List[int],
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_admin),
+    _: models.User = Depends(require_manager),
 ):
-    """Reorder banners by updating their sort_order"""
+    """reorder banners by updating their sort_order"""
     if not banner_order:
         raise HTTPException(status_code=400, detail="Banner order list cannot be empty")
     
-    # Verify all banner IDs exist
+    # verify all banner IDs exist
     banners = db.query(models.Banner).filter(models.Banner.id.in_(banner_order)).all()
     if len(banners) != len(banner_order):
         raise HTTPException(status_code=400, detail="One or more banner IDs not found")
     
-    # Update sort_order for each banner
+    # update sort_order for each banner
     for index, banner_id in enumerate(banner_order):
         banner = next((b for b in banners if b.id == banner_id), None)
         if banner:

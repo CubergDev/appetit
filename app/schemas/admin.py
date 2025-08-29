@@ -58,7 +58,7 @@ class PromoUpdate(BaseModel):
 
 
 class AdminPushTargeting(BaseModel):
-    """Advanced targeting options for push notifications."""
+    """advanced targeting options for push notifications."""
     audience: str = Field("all", description="Target audience: all, topic, platform, verified_users, role")
     topic: Optional[str] = Field(None, description="Topic name for topic-based messaging")
     platform: Optional[str] = Field(None, description="Target specific platform: android, ios, web")
@@ -78,7 +78,7 @@ class AdminPushRequest(BaseModel):
 
 
 class PushResult(BaseModel):
-    """Individual push notification result."""
+    """individual push notification result."""
     token: Optional[str] = None
     success: bool
     message_id: Optional[str] = None
@@ -109,7 +109,7 @@ class AdminSmsResponse(BaseModel):
 
 
 class ImageUploadResponse(BaseModel):
-    """Response for successful image upload."""
+    """response for successful image upload."""
     filename: str = Field(..., description="Generated filename of the processed image")
     image_url: str = Field(..., description="URL path to access the image")
     original_filename: str = Field(..., description="Original filename of uploaded image")
@@ -117,12 +117,12 @@ class ImageUploadResponse(BaseModel):
 
 
 class MenuItemImageUpdate(BaseModel):
-    """Schema for updating menu item image via file upload."""
+    """schema for updating menu item image via file upload."""
     image_url: Optional[str] = Field(None, description="New image URL for the menu item")
 
 
 class BannerCreate(BaseModel):
-    """Schema for creating a new banner."""
+    """schema for creating a new banner."""
     title: str = Field(..., description="Banner title", max_length=255)
     title_translations: Optional[Dict[str, str]] = Field(None, description="Title translations (ru, kz, en)")
     description: Optional[str] = Field(None, description="Banner description")
@@ -136,7 +136,7 @@ class BannerCreate(BaseModel):
 
 
 class BannerUpdate(BaseModel):
-    """Schema for updating an existing banner."""
+    """schema for updating an existing banner."""
     title: Optional[str] = Field(None, description="Banner title", max_length=255)
     title_translations: Optional[Dict[str, str]] = Field(None, description="Title translations (ru, kz, en)")
     description: Optional[str] = Field(None, description="Banner description")
@@ -150,7 +150,7 @@ class BannerUpdate(BaseModel):
 
 
 class BannerOut(BaseModel):
-    """Schema for banner output."""
+    """schema for banner output."""
     id: int
     title: str
     title_translations: Optional[Dict[str, str]] = None

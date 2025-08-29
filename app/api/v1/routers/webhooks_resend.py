@@ -48,7 +48,7 @@ async def resend_webhook(request: Request, background: BackgroundTasks, db: Sess
     if not all(headers.values()):
         raise HTTPException(status_code=400, detail="Missing Svix headers")
     
-    # 3) Verify signature (5-minute tolerance)
+    # 3) check signature (5-minute tolerance)
     wh = Webhook(RESEND_WEBHOOK_SECRET)
     try:
         event = wh.verify(payload_bytes, headers, tolerance=300)
@@ -171,14 +171,14 @@ async def process_resend_event(event: Dict[str, Any], db: Session):
 
 
 def _generate_event_id(event: Dict[str, Any]) -> str:
-    """Generate a deterministic event ID for idempotency."""
+    """generate a deterministic event ID for idempotency."""
     event_string = json.dumps(event, sort_keys=True)
     return hashlib.sha256(event_string.encode()).hexdigest()
 
 
 @router.get("/resend/health")
 async def webhook_health():
-    """Health check for webhook endpoint."""
+    """health check for webhook endpoint."""
     return {
         "status": "ok",
         "webhook_secret_configured": bool(RESEND_WEBHOOK_SECRET),

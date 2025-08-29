@@ -50,7 +50,7 @@ class DeviceLocation(BaseModel):
 
 
 class OrderAddressData(BaseModel):
-    """Complete address data structure for order persistence as per geo.md spec."""
+    """complete address data structure for order persistence as per geo.md spec."""
     typed_address: str = Field(..., description="User's original typed address")
     components: AddressComponents = Field(default_factory=AddressComponents, description="Structured address components")
     geocoded: Optional[GeocodedData] = Field(None, description="Geocoding result data")
@@ -78,3 +78,9 @@ class AutocompleteRequest(BaseModel):
     locationBias: Optional[Dict[str, Any]] = None
     regionCode: Optional[str] = None
     lang: Optional[str] = None
+
+
+class GeocodeRequest(BaseModel):
+    """Legacy geocode request schema for POST /geocode endpoint"""
+    address: str = Field(..., description="Address to geocode")
+    lang: Optional[str] = Field(None, description="Language for results (ru, kk, en)")

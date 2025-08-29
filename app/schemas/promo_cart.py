@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -23,7 +24,7 @@ class PromoValidateResponse(BaseModel):
 class PriceRequest(BaseModel):
     items: List[CartItem]
     promocode: Optional[str] = None
-    fulfillment: Optional[str] = None  # delivery|pickup
+    pickup_or_delivery: Optional[str] = None  # delivery|pickup
     address: Optional[str] = None
 
 
@@ -40,3 +41,16 @@ class PriceResponse(BaseModel):
     discount: float
     total: float
     details: List[PriceDetailsLine]
+
+
+class PromoCodeCreate(BaseModel):
+    code: str
+    discount_percent: float
+    min_order_amount: Optional[float] = None
+    max_uses: Optional[int] = None
+    expires_at: Optional[datetime] = None
+
+
+class PromoCodeUpdate(BaseModel):
+    discount_percent: Optional[float] = None
+    is_active: Optional[bool] = None

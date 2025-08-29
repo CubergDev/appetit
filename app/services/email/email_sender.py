@@ -43,14 +43,14 @@ TEMPLATES = {
 
 
 def add_utm_parameters(url: str, template: str) -> str:
-    """Add UTM parameters to a URL for email tracking."""
+    """add UTM parameters to a URL for email tracking."""
     if not url or not url.startswith(('http://', 'https://')):
         return url
     
     parsed = urlparse(url)
     query_params = parse_qs(parsed.query)
     
-    # add UTM parameters
+    # add UTM params
     query_params['utm_source'] = ['email']
     query_params['utm_medium'] = ['transactional']
     query_params['utm_campaign'] = [template]
@@ -61,11 +61,11 @@ def add_utm_parameters(url: str, template: str) -> str:
 
 
 def select_subject(template: str, variables: Dict[str, Any], locale: str = "en") -> str:
-    """Select and format subject line for a template with locale support."""
+    """select and format subject line for a template with locale support."""
     if template not in TEMPLATES:
         return f"Notification from {FROM_NAME}"
     
-    # Locale-specific subjects
+    # locale-specific subjects
     subjects = {
         "verify_email": {
             "en": "Verify your email address",
@@ -94,13 +94,13 @@ def select_subject(template: str, variables: Dict[str, Any], locale: str = "en")
         }
     }
     
-    # Get localized subject or fallback to English or default template
+    # get localized subject or fallback to English or default template
     if template in subjects:
         subject_template = subjects[template].get(locale, subjects[template].get("en", TEMPLATES[template]["subject"]))
     else:
         subject_template = TEMPLATES[template]["subject"]
     
-    # Simple variable substitution for subjects
+    # simple variable substitution for subjects
     try:
         return subject_template.format(**variables)
     except (KeyError, ValueError):
@@ -108,14 +108,14 @@ def select_subject(template: str, variables: Dict[str, Any], locale: str = "en")
 
 
 def render_template(template: str, variables: Dict[str, Any], locale: str = "en") -> str:
-    """Render HTML template with variables, UTM parameters, and locale support."""
-    # add UTM parameters to all URLs in variables
+    """render HTML template with variables, UTM parameters, and locale support."""
+    # add UTM params to all URLs in variables
     enhanced_vars = variables.copy()
     for key, value in variables.items():
         if isinstance(value, str) and key.endswith('_url'):
             enhanced_vars[key] = add_utm_parameters(value, template)
     
-    # Helper function to get localized text
+    # helper function to get localized text
     def get_text(key: str) -> str:
         texts = {
             "hello": {"en": "Hello", "ru": "Привет", "kz": "Сәлем"},
@@ -164,7 +164,7 @@ def render_template(template: str, variables: Dict[str, Any], locale: str = "en"
         pickup_or_delivery = enhanced_vars.get("pickup_or_delivery", "pickup")
         eta = enhanced_vars.get("eta", "")
         
-        # Localize pickup/delivery type
+        # localize pickup/delivery type
         delivery_type_localized = get_text("pickup") if pickup_or_delivery.lower() == "pickup" else get_text("delivery")
         
         html = f"""
@@ -243,14 +243,16 @@ def send_email(
     Returns:
         Dict with result including message_id from Resend
     """
-    if resend is None or not os.getenv("RESEND_API_KEY"):
+    if resend is None:
+        return {"status": "skipped", "reason": "resend_not_installed"}
+    if not os.getenv("RESEND_API_KEY"):
         return {"status": "skipped", "reason": "resend_not_configured"}
     
-    # validate template
+    # check template
     if template not in TEMPLATES:
         return {"status": "error", "reason": "invalid_template", "template": template}
     
-    # validate required variables
+    # check required variables
     required_vars = TEMPLATES[template]["required_vars"]
     missing_vars = [var for var in required_vars if var not in variables]
     if missing_vars:
@@ -301,8 +303,10 @@ def send_html(to: str, subject: str, html: str, tags: Optional[Dict[str, str]] =
     """Send an email via Resend if configured; otherwise, no-op.
     Compatibility function matching resend_client.py interface.
     """
-    if resend is None or not os.getenv("RESEND_API_KEY") or not FROM_EMAIL:
-        # No-op fallback for dev environments
+    if resend is None:
+        return {"status": "skipped", "reason": "resend_not_installed"}
+    if not os.getenv("RESEND_API_KEY") or not FROM_EMAIL:
+        # no-op fallback for dev environments
         return {"status": "skipped", "reason": "resend_not_configured"}
 
     try:
@@ -315,15 +319,25 @@ def send_html(to: str, subject: str, html: str, tags: Optional[Dict[str, str]] =
         }
         if tags:
             params["tags"] = [{"name": k, "value": str(v)} for k, v in tags.items()]
-        return resend.Emails.send(params)
+        
+        result = resend.Emails.send(params)
+        
+        # return consistent format like send_email
+        message_id = result.get("id") if isinstance(result, dict) else None
+        return {
+            "status": "sent",
+            "message_id": message_id,
+            "recipient": to,
+            "subject": subject
+        }
     except Exception as e:
         return {"status": "error", "reason": "send_failed", "error": str(e)}
 
 
 def health_check() -> Dict[str, str]:
-    """Check email sender configuration and health."""
+    """check email sender config and health."""
     if resend is None:
-        return {"status": "unavailable", "reason": "resend_library_not_installed"}
+        return {"status": "unavailable", "reason": "resend_not_installed"}
     
     api_key = os.getenv("RESEND_API_KEY")
     from_email = os.getenv("FROM_EMAIL")
@@ -333,4 +347,4 @@ def health_check() -> Dict[str, str]:
     if not from_email:
         return {"status": "misconfigured", "reason": "missing_from_email"}
     
-    return {"status": "configured", "from_email": from_email, "templates": len(TEMPLATES)}
+    return {"status": "configured", "from_email": from_email, "from_name": FROM_NAME, "templates": len(TEMPLATES)}

@@ -7,7 +7,7 @@ GA_ENDPOINT = "https://www.google-analytics.com/mp/collect"
 
 
 def health_check() -> Dict[str, str]:
-    """Check GA4 Analytics integration health and configuration status."""
+    """check GA4 Analytics integration health and config status."""
     measurement_id = os.getenv("GA4_MEASUREMENT_ID")
     api_secret = os.getenv("GA4_API_SECRET")
     

@@ -3,7 +3,7 @@ from app.services.email.email_sender import send_email
 
 
 def send_order_created(to: str, order, user_id: Optional[int] = None, pickup_or_delivery: str = "pickup", eta: str = "30 minutes", locale: str = "en"):
-    """Send order created email using new template system."""
+    """send order created email using new template system."""
     try:
         # build order URL (assuming frontend has order detail page)
         order_url = f"https://ium.app/orders/{order.id}"
@@ -28,7 +28,7 @@ def send_order_created(to: str, order, user_id: Optional[int] = None, pickup_or_
 
 
 def send_order_status(to: str, order, status: str, eta: str = "15 minutes", user_id: Optional[int] = None, locale: str = "en"):
-    """Send order status update email."""
+    """send order status update email."""
     try:
         result = send_email(
             template="order_status",
@@ -47,7 +47,7 @@ def send_order_status(to: str, order, status: str, eta: str = "15 minutes", user
 
 
 def send_order_delivered(to: str, order, user_id: Optional[int] = None, locale: str = "en"):
-    """Send order delivered email with rating request."""
+    """send order delivered email with rating request."""
     try:
         # build rating URL (assuming frontend has rating page)
         rating_url = f"https://ium.app/orders/{order.id}/rate"

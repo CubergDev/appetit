@@ -36,14 +36,14 @@ def register_device(payload: DeviceRegisterRequest, db: Session = Depends(get_db
     return device
 
 
-# Admin device management
+# admin device management
 
 @router.get("", response_model=List[DeviceOut])
 def list_devices(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin)
 ):
-    """List all devices (Admin only)"""
+    """list all devices (Admin only)"""
     devices = db.query(models.Device).order_by(models.Device.created_at.desc()).all()
     return devices
 
@@ -54,7 +54,7 @@ def delete_device(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin)
 ):
-    """Delete a device (Admin only)"""
+    """delete a device (Admin only)"""
     device = db.get(models.Device, device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")

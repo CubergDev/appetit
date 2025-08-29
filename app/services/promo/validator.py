@@ -21,8 +21,8 @@ def calculate_discount(db: Session, code: Optional[str], subtotal: Decimal, user
     if not code:
         return PromoValidationResult(valid=True, discount=Decimal('0.0'))
 
-    promo: models.Promocode | None = db.get(models.Promocode, code)
-    if not promo or not promo.active:
+    promo: models.Promocode | None = db.query(models.Promocode).filter(models.Promocode.code == code).first()
+    if not promo or not promo.is_active:
         return PromoValidationResult(valid=False, reason="invalid_or_inactive")
 
     now = datetime.utcnow()
@@ -34,7 +34,7 @@ def calculate_discount(db: Session, code: Optional[str], subtotal: Decimal, user
     if promo.min_subtotal is not None and subtotal < Decimal(str(promo.min_subtotal)):
         return PromoValidationResult(valid=False, reason="min_subtotal_not_met")
 
-    # note: max_redemptions and per_user_limit are not tracked in MVP without redemption logs
+    # note: max_redemptions and per_user_limit aren't tracked in MVP without redemption logs
     # apply discount
     discount = Decimal('0.0')
     if promo.kind == "percent":
@@ -45,3 +45,19 @@ def calculate_discount(db: Session, code: Optional[str], subtotal: Decimal, user
     # ensure non-negative total
     discount = min(discount, subtotal)
     return PromoValidationResult(valid=True, discount=discount)
+
+
+def is_promo_valid(promo_code: str, order_total: float = 0.0, db: Session = None) -> bool:
+    """Check if a promo code is valid (for tests)"""
+    if not promo_code or db is None:
+        return False
+    
+    promo = db.query(models.Promocode).filter(models.Promocode.code == promo_code).first()
+    if not promo or not promo.is_active:
+        return False
+    
+    # Check minimum order amount if specified
+    if hasattr(promo, 'min_subtotal') and promo.min_subtotal and order_total < float(promo.min_subtotal):
+        return False
+    
+    return True

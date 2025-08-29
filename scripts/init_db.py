@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_database_if_not_exists():
-    """Create database if it doesn't exist (PostgreSQL only)."""
+    """create db if it doesn't exist (PostgreSQL only)."""
     database_url = settings.DATABASE_URL
     
     if not database_url.startswith("postgresql"):
@@ -43,17 +43,17 @@ def create_database_if_not_exists():
         return True
     
     try:
-        # parse database URL to get database name
+        # parse db URL to get db name
         from urllib.parse import urlparse
         parsed = urlparse(database_url)
         database_name = parsed.path[1:]  # Remove leading '/'
         
-        # create connection to postgres database (without specific DB)
-        # properly reconstruct URL to avoid replacing database name in other parts (like username)
+        # create connection to postgres db (without specific DB)
+        # properly reconstruct URL to avoid replacing db name in other parts (like username)
         postgres_url = f"{parsed.scheme}://{parsed.netloc}/postgres"
         postgres_engine = create_engine(postgres_url)
         
-        # check if database exists
+        # check if db exists
         with postgres_engine.connect() as conn:
             conn.execute(text("COMMIT"))  # End any existing transaction
             result = conn.execute(
@@ -63,7 +63,7 @@ def create_database_if_not_exists():
             
             if result.fetchone() is None:
                 logger.info(f"Creating database: {database_name}")
-                # create database
+                # create db
                 conn.execute(text(f'CREATE DATABASE "{database_name}"'))
                 logger.info(f"Database {database_name} created successfully")
             else:
@@ -78,7 +78,7 @@ def create_database_if_not_exists():
 
 
 def run_migrations():
-    """Run Alembic migrations to create/update schema."""
+    """run Alembic migrations to create/update schema."""
     try:
         logger.info("Running Alembic migrations...")
         
@@ -104,7 +104,7 @@ def run_migrations():
 
 
 def delete_all_data():
-    """Delete all existing data from database tables in proper order."""
+    """delete all existing data from db tables in proper order."""
     try:
         logger.info("Deleting all existing data...")
         
@@ -177,7 +177,7 @@ def delete_all_data():
 
 
 def seed_initial_data():
-    """Delete all data, run migrations, and seed initial data (categories, admin user, plain users with realistic data, etc.)."""
+    """delete all data, run migrations, and seed initial data (categories, admin user, plain users with realistic data, etc.)."""
     try:
         logger.info("Starting data seeding process...")
         
@@ -211,23 +211,32 @@ def seed_initial_data():
                 logger.error(f"Failed to load menu.json: {e}")
                 return False
             
-            # create categories from menu.json
+            # create categories from menu.json with translations
             categories = []
-            category_names = [category["category"] for category in menu_data["menu"]]
             
-            for i, cat_name in enumerate(category_names, 1):
+            for i, category_data in enumerate(menu_data["menu"], 1):
+                cat_name = category_data["category"]
+                cat_translations = category_data.get("category_translations", {})
+                
                 existing = db.query(Category).filter(Category.name == cat_name).first()
                 if not existing:
                     category = Category(
                         name=cat_name,
+                        name_translations=cat_translations,
                         sort=i,
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()
                     )
                     db.add(category)
                     categories.append(category)
-                    logger.info(f"Created category: {cat_name}")
+                    logger.info(f"Created category: {cat_name} with translations: {list(cat_translations.keys())}")
                 else:
+                    # update existing category with translations if not present
+                    if not existing.name_translations and cat_translations:
+                        existing.name_translations = cat_translations
+                        existing.updated_at = datetime.utcnow()
+                        db.add(existing)
+                        logger.info(f"Updated category {cat_name} with translations")
                     categories.append(existing)
             
             db.commit()
@@ -236,7 +245,7 @@ def seed_initial_data():
             for cat in categories:
                 db.refresh(cat)
             
-            # create menu items from menu.json
+            # create menu items from menu.json with translations
             menu_items = []
             for category_data in menu_data["menu"]:
                 category_name = category_data["category"]
@@ -249,21 +258,44 @@ def seed_initial_data():
                             MenuItem.category_id == category.id
                         ).first()
                         if not existing_item:
-                            # Convert price from kopecks to rubles (divide by 100)
-                            price_rubles = item_data["price"] / 100.0
+                            # prices are now in tenge, no conversion needed
+                            price_tenge = float(item_data["price"])
+                            name_translations = item_data.get("name_translations", {})
+                            description_translations = item_data.get("description_translations", {})
+                            
                             menu_item = MenuItem(
                                 category_id=category.id,
                                 name=item_data["name"],
+                                name_translations=name_translations,
                                 description=item_data["description"],
-                                price=price_rubles,
+                                description_translations=description_translations,
+                                price=price_tenge,
                                 is_active=True,
                                 created_at=datetime.utcnow(),
                                 updated_at=datetime.utcnow()
                             )
                             db.add(menu_item)
                             menu_items.append(menu_item)
-                            logger.info(f"Created menu item: {item_data['name']}")
+                            logger.info(f"Created menu item: {item_data['name']} with translations: name={list(name_translations.keys())}, desc={list(description_translations.keys())}")
                         else:
+                            # update existing item with translations if not present
+                            name_translations = item_data.get("name_translations", {})
+                            description_translations = item_data.get("description_translations", {})
+                            updated = False
+                            
+                            if not existing_item.name_translations and name_translations:
+                                existing_item.name_translations = name_translations
+                                updated = True
+                            
+                            if not existing_item.description_translations and description_translations:
+                                existing_item.description_translations = description_translations
+                                updated = True
+                                
+                            if updated:
+                                existing_item.updated_at = datetime.utcnow()
+                                db.add(existing_item)
+                                logger.info(f"Updated menu item {item_data['name']} with translations")
+                            
                             menu_items.append(existing_item)
             
             db.commit()
@@ -275,26 +307,71 @@ def seed_initial_data():
             # create default modification types
             logger.info("Creating default modification types...")
             
-            # Default sauces (available by default for all dishes)
+            # default sauces (available by default for all dishes) with translations
             default_sauces = [
-                {"name": "сырный", "category": "sauce", "is_default": True},
-                {"name": "кетчуп", "category": "sauce", "is_default": True},
-                {"name": "кисло-сладкий", "category": "sauce", "is_default": True},
-                {"name": "ранч", "category": "sauce", "is_default": True},
-                {"name": "горчичный", "category": "sauce", "is_default": True},
+                {
+                    "name": "сырный", 
+                    "category": "sauce", 
+                    "is_default": True,
+                    "name_translations": {"ru": "сырный", "kz": "ірімшік", "en": "cheese"}
+                },
+                {
+                    "name": "кетчуп", 
+                    "category": "sauce", 
+                    "is_default": True,
+                    "name_translations": {"ru": "кетчуп", "kz": "кетчуп", "en": "ketchup"}
+                },
+                {
+                    "name": "кисло-сладкий", 
+                    "category": "sauce", 
+                    "is_default": True,
+                    "name_translations": {"ru": "кисло-сладкий", "kz": "қышқыл-тәтті", "en": "sweet and sour"}
+                },
+                {
+                    "name": "ранч", 
+                    "category": "sauce", 
+                    "is_default": True,
+                    "name_translations": {"ru": "ранч", "kz": "ранч", "en": "ranch"}
+                },
+                {
+                    "name": "горчичный", 
+                    "category": "sauce", 
+                    "is_default": True,
+                    "name_translations": {"ru": "горчичный", "kz": "қыша", "en": "mustard"}
+                },
             ]
             
-            # Removal options (things that can be removed from dishes)
+            # removal options (things that can be removed from dishes) with translations
             removal_options = [
-                {"name": "лука", "category": "removal", "is_default": False},
-                {"name": "майонеза", "category": "removal", "is_default": False},
-                {"name": "кетчупа", "category": "removal", "is_default": False},
-                {"name": "мяса", "category": "removal", "is_default": False},
+                {
+                    "name": "лука", 
+                    "category": "removal", 
+                    "is_default": False,
+                    "name_translations": {"ru": "лука", "kz": "пияз", "en": "onion"}
+                },
+                {
+                    "name": "майонеза", 
+                    "category": "removal", 
+                    "is_default": False,
+                    "name_translations": {"ru": "майонеза", "kz": "майонез", "en": "mayonnaise"}
+                },
+                {
+                    "name": "кетчупа", 
+                    "category": "removal", 
+                    "is_default": False,
+                    "name_translations": {"ru": "кетчупа", "kz": "кетчуп", "en": "ketchup"}
+                },
+                {
+                    "name": "мяса", 
+                    "category": "removal", 
+                    "is_default": False,
+                    "name_translations": {"ru": "мяса", "kz": "ет", "en": "meat"}
+                },
             ]
             
             all_modifications = default_sauces + removal_options
             
-            # Check which modifications already exist
+            # check which modifications already exist
             existing_names = set()
             existing_mods = db.query(ModificationType).all()
             for mod in existing_mods:
@@ -306,15 +383,25 @@ def seed_initial_data():
                 if key not in existing_names:
                     modification = ModificationType(
                         name=mod_data["name"],
+                        name_translations=mod_data.get("name_translations", {}),
                         category=mod_data["category"],
                         is_default=mod_data["is_default"],
                         is_active=True
                     )
                     db.add(modification)
                     created_count += 1
-                    logger.info(f"Created {mod_data['category']} modification: {mod_data['name']}")
+                    translations = mod_data.get("name_translations", {})
+                    logger.info(f"Created {mod_data['category']} modification: {mod_data['name']} with translations: {list(translations.keys())}")
                 else:
-                    logger.info(f"Skipped existing {mod_data['category']} modification: {mod_data['name']}")
+                    # update existing modification with translations if not present
+                    existing_mod = next((mod for mod in existing_mods if mod.name == mod_data["name"] and mod.category == mod_data["category"]), None)
+                    if existing_mod and not existing_mod.name_translations and mod_data.get("name_translations"):
+                        existing_mod.name_translations = mod_data["name_translations"]
+                        existing_mod.updated_at = datetime.utcnow()
+                        db.add(existing_mod)
+                        logger.info(f"Updated {mod_data['category']} modification {mod_data['name']} with translations")
+                    else:
+                        logger.info(f"Skipped existing {mod_data['category']} modification: {mod_data['name']}")
             
             if created_count > 0:
                 db.commit()
@@ -322,7 +409,7 @@ def seed_initial_data():
             else:
                 logger.info("No new modification types were created (all already exist).")
             
-            # Display summary
+            # display summary
             total_sauces = db.query(ModificationType).filter(ModificationType.category == "sauce").count()
             total_removals = db.query(ModificationType).filter(ModificationType.category == "removal").count()
             logger.info(f"Database now contains: {total_sauces} sauce modifications, {total_removals} removal modifications")
@@ -346,8 +433,46 @@ def seed_initial_data():
                 db.add(admin_user)
                 logger.info(f"Created admin user: {admin_email}")
             
+            # create manager user for testing
+            manager_email = "manager@ium.app"
+            existing_manager = db.query(User).filter(User.email == manager_email).first()
+            
+            if not existing_manager:
+                manager_user = User(
+                    full_name="Test Manager",
+                    email=manager_email,
+                    phone="+77081234568",
+                    password_hash=get_password_hash("Manager123!"),
+                    role="manager",
+                    is_email_verified=True,
+                    is_phone_verified=True,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(manager_user)
+                logger.info(f"Created manager user: {manager_email}")
+            
+            # create courier user for testing
+            courier_email = "courier@ium.app"
+            existing_courier = db.query(User).filter(User.email == courier_email).first()
+            
+            if not existing_courier:
+                courier_user = User(
+                    full_name="Test Courier",
+                    email=courier_email,
+                    phone="+77081234569",
+                    password_hash=get_password_hash("Courier123!"),
+                    role="courier",
+                    is_email_verified=True,
+                    is_phone_verified=True,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(courier_user)
+                logger.info(f"Created courier user: {courier_email}")
+            
             # create 2 real users with saved addresses
-            # Generate random phone for second user
+            # generate random phone for second user
             random_phone = f"+77{random.randint(7000000000, 7999999999)}"
             
             plain_users_data = [
@@ -412,9 +537,9 @@ def seed_initial_data():
             
             # create some promocodes for realistic usage
             promo_codes_data = [
-                {"code": "WELCOME10", "kind": "percent", "value": 10, "active": True},
-                {"code": "SAVE5", "kind": "amount", "value": 5, "active": True},
-                {"code": "NEWUSER20", "kind": "percent", "value": 20, "active": True},
+                {"code": "WELCOME10", "kind": "percent", "discount_percent": 10.0, "is_active": True, "current_uses": 0},
+                {"code": "SAVE5", "kind": "percent", "discount_percent": 5.0, "min_order_amount": 50.0, "is_active": True, "current_uses": 0},
+                {"code": "NEWUSER20", "kind": "percent", "discount_percent": 20.0, "max_uses": 100, "is_active": True, "current_uses": 0},
             ]
             
             for promo_data in promo_codes_data:
@@ -459,7 +584,7 @@ def seed_initial_data():
                         order = Order(
                             number=f"ORD-{order_counter}",
                             user_id=user.id,
-                            fulfillment=random.choice(["delivery", "pickup"]),
+                            pickup_or_delivery=random.choice(["delivery", "pickup"]),
                             address_text=random_address.address_text,
                             lat=random_address.latitude,
                             lng=random_address.longitude,
@@ -509,7 +634,7 @@ def seed_initial_data():
 
 
 def check_database_connection():
-    """Check if database connection is working."""
+    """check if db connection is working."""
     try:
         logger.info("Testing database connection...")
         
@@ -548,7 +673,7 @@ def main():
     logger.info("Starting database initialization...")
     logger.info(f"Database URL: {settings.DATABASE_URL}")
     
-    # check if we should force recreate database
+    # check if we should force recreate db
     if args.force_recreate:
         logger.warning("Force recreate requested - this will DELETE existing database!")
         confirm = input("Are you sure? Type 'yes' to continue: ")
@@ -556,7 +681,7 @@ def main():
             logger.info("Operation cancelled")
             return False
     
-    # step 1: Create database if needed (skip for non-PostgreSQL when only checking)
+    # step 1: create db if needed (skip for non-PostgreSQL when only checking)
     if args.check_only and not settings.DATABASE_URL.startswith("postgresql"):
         logger.info("Skipping database creation for non-PostgreSQL database in check-only mode")
     else:
@@ -564,7 +689,7 @@ def main():
             logger.error("Failed to create database")
             return False
     
-    # step 2: Check database connection
+    # step 2: Check db connection
     if not check_database_connection():
         logger.error("Database connection failed")
         return False

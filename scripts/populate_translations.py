@@ -6,7 +6,7 @@ Run this after adding translation fields to ensure backwards compatibility.
 import sys
 import os
 
-# Add the project root to the Python path
+# add the project root to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ from app.services.locale.locale_helper import populate_translation_field
 
 
 def populate_category_translations():
-    """Populate category name translations with existing names as English default."""
+    """populate category name translations with existing names as English default."""
     print("Populating category translations...")
     db: Session = SessionLocal()
     try:
@@ -39,7 +39,7 @@ def populate_category_translations():
 
 
 def populate_menu_item_translations():
-    """Populate menu item name and description translations with existing data as English default."""
+    """populate menu item name and description translations with existing data as English default."""
     print("Populating menu item translations...")
     db: Session = SessionLocal()
     try:
@@ -49,12 +49,12 @@ def populate_menu_item_translations():
         for item in menu_items:
             needs_update = False
             
-            # Update name translations
+            # update name translations
             if item.name and not item.name_translations:
                 item.name_translations = populate_translation_field(item.name)
                 needs_update = True
             
-            # Update description translations
+            # update description translations
             if item.description and not item.description_translations:
                 item.description_translations = populate_translation_field(item.description)
                 needs_update = True
@@ -73,7 +73,7 @@ def populate_menu_item_translations():
 
 
 def populate_modification_type_translations():
-    """Populate modification type name translations with existing names as English default."""
+    """populate modification type name translations with existing names as English default."""
     print("Populating modification type translations...")
     db: Session = SessionLocal()
     try:
@@ -96,7 +96,7 @@ def populate_modification_type_translations():
 
 
 def main():
-    """Run all translation population tasks."""
+    """run all translation population tasks."""
     print("Starting translation data population...")
     print("=" * 50)
     

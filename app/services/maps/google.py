@@ -18,7 +18,7 @@ def _disabled() -> Dict[str, Any]:
 
 
 def health_check() -> Dict[str, str]:
-    """Check Google Maps integration health and configuration status."""
+    """check Google Maps integration health and config status."""
     api_key = os.getenv("GOOGLE_MAPS_API_KEY_SERVER")
     
     if not api_key:
@@ -32,7 +32,7 @@ def health_check() -> Dict[str, str]:
 
 
 def _get_cached_result(cache: Dict[str, Dict[str, Any]], key: str, max_age_seconds: int) -> Optional[Dict[str, Any]]:
-    """Get cached result if it's still valid."""
+    """get cached result if it's still valid."""
     if key in cache:
         cached_data = cache[key]
         if time.time() - cached_data.get("_cached_at", 0) < max_age_seconds:
@@ -43,7 +43,7 @@ def _get_cached_result(cache: Dict[str, Dict[str, Any]], key: str, max_age_secon
 
 
 def _cache_result(cache: Dict[str, Dict[str, Any]], key: str, result: Dict[str, Any]) -> None:
-    """Cache result with timestamp."""
+    """cache result with timestamp."""
     result_with_timestamp = result.copy()
     result_with_timestamp["_cached_at"] = time.time()
     cache[key] = result_with_timestamp
@@ -78,7 +78,7 @@ def forward_geocode(
     if cached:
         return cached
     
-    # build parameters with Kazakhstan biasing
+    # build params with Kazakhstan biasing
     params: Dict[str, Any] = {
         "address": address,
         "key": API_KEY,
@@ -142,7 +142,7 @@ def reverse_geocode(
     if cached:
         return cached
     
-    # build parameters
+    # build params
     params: Dict[str, Any] = {
         "latlng": f"{lat},{lng}",
         "key": API_KEY,
@@ -150,7 +150,7 @@ def reverse_geocode(
         "region": region
     }
     
-    # add filtering parameters for precise results
+    # add filtering params for precise results
     if result_type:
         params["result_type"] = result_type
     
@@ -225,5 +225,5 @@ def is_valid_fallback_address(typed_address: str, components: Dict[str, str]) ->
 
 # legacy function for backward compatibility - will be deprecated
 def geocode(address: str, lang: Optional[str] = None) -> Dict[str, Any]:
-    """Legacy geocode function. Use forward_geocode instead."""
+    """legacy geocode function. Use forward_geocode instead."""
     return forward_geocode(address, language=lang or "ru")

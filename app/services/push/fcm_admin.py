@@ -35,7 +35,7 @@ def _ensure_init():
 
 
 def health_check() -> Dict[str, str]:
-    """Check FCM integration health and configuration status."""
+    """check FCM integration health and config status."""
     if firebase_admin is None or credentials is None:
         return {"status": "unavailable", "reason": "firebase_library_not_installed"}
     
@@ -84,7 +84,7 @@ def send_to_token(
         return {"status": "skipped", "reason": "fcm_not_configured"}
     
     try:
-        # Build Android config (Android-only)
+        # build Android config (Android-only)
         android_config = messaging.AndroidConfig(
             priority=priority,
             ttl=timedelta(seconds=ttl) if ttl else None,
@@ -147,7 +147,7 @@ def send_batch(
     if not tokens:
         return {"status": "skipped", "reason": "no_tokens"}
     
-    # Limit batch size to FCM's maximum
+    # limit batch size to FCM's maximum
     batch_size = min(batch_size, 500)
     total_sent = 0
     total_failed = 0
@@ -156,17 +156,17 @@ def send_batch(
     all_results: List[Dict[str, Union[str, bool]]] = []
     
     try:
-        # Build Android config (Android-only)
+        # build Android config (Android-only)
         android_config = messaging.AndroidConfig(
             priority=priority,
             ttl=timedelta(seconds=ttl) if ttl else None,
         )
         
-        # Process tokens in batches
+        # process tokens in batches
         for i in range(0, len(tokens), batch_size):
             batch_tokens = tokens[i:i + batch_size]
             
-            # Create multicast message for this batch
+            # create multicast message for this batch
             multicast = messaging.MulticastMessage(
                 tokens=batch_tokens,
                 notification=messaging.Notification(title=title, body=body),
@@ -175,9 +175,9 @@ def send_batch(
             )
             
             try:
-                # Send batch
+                # send batch
                 response = messaging.send_multicast(multicast)
-                # Compute success/failure counts robustly and cap to batch size
+                # compute success/failure counts robustly and cap to batch size
                 if hasattr(response, "responses") and response.responses is not None:
                     succ = sum(1 for r in response.responses if getattr(r, "success", False))
                 else:
@@ -186,7 +186,7 @@ def send_batch(
                 total_sent += succ
                 total_failed += fail
                 
-                # Collect individual results
+                # collect individual results
                 for j, res in enumerate(response.responses):
                     if res.success:
                         message_ids.append(getattr(res, "message_id", None) or "")
@@ -257,7 +257,7 @@ def send_to_topic(
         return {"status": "skipped", "reason": "fcm_not_configured"}
     
     try:
-        # Build Android config (Android-only)
+        # build Android config (Android-only)
         android_config = messaging.AndroidConfig(
             priority=priority,
             ttl=timedelta(seconds=ttl) if ttl else None,
@@ -300,7 +300,7 @@ def subscribe_to_topic(tokens: List[str], topic: str) -> Dict[str, Union[str, in
     
     try:
         response = messaging.subscribe_to_topic(tokens, topic)
-        # Determine status
+        # determine status
         succ = getattr(response, "success_count", 0)
         fail = getattr(response, "failure_count", 0)
         status = "success" if fail == 0 else ("partial" if succ > 0 else "failed")

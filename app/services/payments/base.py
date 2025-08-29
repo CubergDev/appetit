@@ -5,7 +5,7 @@ import os
 
 
 class PaymentsProvider:
-    """Base payments provider interface (architecture-ready)."""
+    """base payments provider interface (architecture-ready)."""
 
     def init(self, order_id: int, amount: float) -> Dict[str, Any]:  # pragma: no cover
         return {"status": "skipped", "reason": "not_implemented"}

@@ -19,11 +19,11 @@ router = APIRouter(prefix="/admin/push", tags=["admin"])
 
 
 def _get_targeted_tokens(db: Session, targeting) -> tuple[List[str], str]:
-    """Get FCM tokens based on targeting criteria."""
+    """get FCM tokens based on targeting criteria."""
     query = db.query(models.Device).filter(models.Device.fcm_token.is_not(None))
     targeting_method = f"audience:{targeting.audience}"
     
-    # Base query - all devices with FCM tokens
+    # base query - all devices with FCM tokens
     if targeting.audience == "all":
         pass  # No additional filtering
     
@@ -34,7 +34,7 @@ def _get_targeted_tokens(db: Session, targeting) -> tuple[List[str], str]:
         targeting_method += f",platform:{targeting.platform}"
     
     elif targeting.audience == "verified_users":
-        # Join with users table to filter verified users
+        # join with users table to filter verified users
         query = query.join(models.User).filter(
             or_(
                 models.User.is_email_verified == True,
@@ -50,13 +50,13 @@ def _get_targeted_tokens(db: Session, targeting) -> tuple[List[str], str]:
         targeting_method += f",role:{targeting.user_role}"
     
     elif targeting.audience == "topic":
-        # For topic messaging, we don't need individual tokens
+        # for topic messaging, we don't need individual tokens
         return [], f"topic:{targeting.topic}"
     
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported audience: {targeting.audience}")
     
-    # Apply additional filters
+    # apply additional filters
     if targeting.verified_only and targeting.audience not in ["verified_users"]:
         if models.User not in [mapper.class_ for mapper in query.column_descriptions]:
             query = query.join(models.User)
@@ -72,7 +72,7 @@ def _get_targeted_tokens(db: Session, targeting) -> tuple[List[str], str]:
         query = query.filter(models.Device.platform == targeting.platform)
         targeting_method += f",platform:{targeting.platform}"
     
-    # Apply limit if specified
+    # apply limit if specified
     if targeting.max_devices:
         query = query.limit(targeting.max_devices)
         targeting_method += f",limit:{targeting.max_devices}"
@@ -98,11 +98,11 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
     timestamp = datetime.utcnow().isoformat()
     
     try:
-        # Validate priority
+        # check priority
         if req.priority not in ["normal", "high"]:
             raise HTTPException(status_code=400, detail="Priority must be 'normal' or 'high'")
         
-        # Handle dry run
+        # handle dry run
         if req.dry_run:
             if req.targeting.audience == "topic":
                 if not req.targeting.topic:
@@ -129,7 +129,7 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
                     reason="dry_run"
                 )
         
-        # Handle topic messaging
+        # handle topic messaging
         if req.targeting.audience == "topic":
             if not req.targeting.topic:
                 raise HTTPException(status_code=400, detail="Topic required for topic messaging")
@@ -168,7 +168,7 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
                     errors=[result.get("error", "Unknown error")]
                 )
         
-        # Handle token-based messaging
+        # handle token-based messaging
         tokens, targeting_method = _get_targeted_tokens(db, req.targeting)
         
         if not tokens:
@@ -185,7 +185,7 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
         
         logger.info(f"Sending push notifications to {len(tokens)} devices using {targeting_method}")
         
-        # Use batch sending for multiple tokens, individual sending for single token
+        # use batch sending for multiple tokens, individual sending for single token
         if len(tokens) == 1:
             result = send_to_token(
                 token=tokens[0],
@@ -213,15 +213,15 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
                 ttl=req.ttl
             )
             
-            # Map service-level response to API response format
+            # map service-level response to API response format
             sent = result.get("success_count", result.get("sent", 0))
             failed = result.get("failure_count", result.get("failed", 0))
-            # Build results list limited to failed tokens for brevity
+            # build results list limited to failed tokens for brevity
             results = []
             for ft in result.get("failed_tokens", []):
                 results.append(PushResult(token=(ft.get("token") or '')[:20] + "...", success=False, error=ft.get("error")))
         
-        # Collect error reasons
+        # collect error reasons
         errors = []
         if "results" in result:
             for r in result["results"]:
@@ -257,7 +257,7 @@ def send_push(req: AdminPushRequest, db: Session = Depends(get_db), _: models.Us
 
 @router.post("/send-sms", response_model=AdminSmsResponse)
 def send_sms_broadcast(req: AdminSmsRequest, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
-    """Send SMS message to all users with verified phone numbers."""
+    """send SMS message to all users with verified phone numbers."""
     # currently only audience="all" is supported
     # get all users with verified phone numbers
     users_with_phones = db.query(models.User).filter(

@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from datetime import datetime
 
 
@@ -65,7 +65,7 @@ class CartResponse(BaseModel):
 
 class CartPriceRequest(BaseModel):
     promocode: Optional[str] = None
-    fulfillment: Optional[str] = None  # delivery|pickup
+    pickup_or_delivery: Optional[str] = None  # delivery|pickup
     address: Optional[str] = None
 
 
@@ -75,3 +75,17 @@ class CartPriceResponse(BaseModel):
     total: float
     promocode_valid: bool = False
     promocode_message: Optional[str] = None
+
+
+# Test-compatible schema that matches test expectations
+class CartItemCreate(BaseModel):
+    """Test-compatible cart item creation schema"""
+    dish_id: int
+    quantity: int
+    modifications: List[dict] = []
+    
+    @validator('quantity')
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError('Quantity must be greater than 0')
+        return v

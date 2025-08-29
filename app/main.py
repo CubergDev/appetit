@@ -8,7 +8,7 @@ from app.api.v1.api import router as api_v1_router
 
 app = FastAPI(title="APPETIT API", version="0.1.0")
 
-# cors
+# set up CORS so the frontend can talk to us
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS or ["*"],
@@ -17,15 +17,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# mount api
+# mount our API routes
 app.include_router(api_v1_router, prefix="/api/v1")
 
 
 @app.on_event("startup")
 def on_startup():
-    # database managed by alembic
+    # db's handled by alembic migrations
     # run 'alembic upgrade head' or scripts/init_db.py
-    # startup hook for app-level init
+    # startup hook for any app-level init stuff
     pass
 
 

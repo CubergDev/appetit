@@ -10,18 +10,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ImageProcessor:
-    """Service for processing and converting images to webp format."""
+    """service for processing and converting images to webp format."""
     
-    # Supported input formats
+    # supported input formats
     SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
     
-    # Maximum file size (10MB)
+    # maximum file size (10MB)
     MAX_FILE_SIZE = 10 * 1024 * 1024
     
-    # Image quality for webp conversion
+    # image quality for webp conversion
     WEBP_QUALITY = 85
     
-    # Maximum image dimensions
+    # maximum image dimensions
     MAX_WIDTH = 2048
     MAX_HEIGHT = 2048
     
@@ -46,7 +46,7 @@ class ImageProcessor:
         if not file.filename:
             raise HTTPException(status_code=400, detail="No filename provided")
         
-        # Check file extension
+        # check file extension
         file_ext = Path(file.filename).suffix.lower()
         if file_ext not in self.SUPPORTED_FORMATS:
             raise HTTPException(
@@ -54,7 +54,7 @@ class ImageProcessor:
                 detail=f"Unsupported file format. Supported formats: {', '.join(self.SUPPORTED_FORMATS)}"
             )
         
-        # Check file size
+        # check file size
         if hasattr(file, 'size') and file.size and file.size > self.MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400, 
@@ -75,7 +75,7 @@ class ImageProcessor:
         if width <= self.MAX_WIDTH and height <= self.MAX_HEIGHT:
             return image
         
-        # Calculate new dimensions maintaining aspect ratio
+        # calculate new dimensions maintaining aspect ratio
         ratio = min(self.MAX_WIDTH / width, self.MAX_HEIGHT / height)
         new_width = int(width * ratio)
         new_height = int(height * ratio)
@@ -92,9 +92,9 @@ class ImageProcessor:
         Returns:
             Image converted to webp format
         """
-        # Convert RGBA to RGB if necessary (webp doesn't support transparency well)
+        # convert RGBA to RGB if necessary (webp doesn't support transparency well)
         if image.mode in ('RGBA', 'LA', 'P'):
-            # Create white background
+            # create white background
             background = Image.new('RGB', image.size, (255, 255, 255))
             if image.mode == 'P':
                 image = image.convert('RGBA')
@@ -114,10 +114,10 @@ class ImageProcessor:
         Returns:
             New unique filename with .webp extension
         """
-        # Generate UUID for uniqueness
+        # generate UUID for uniqueness
         unique_id = str(uuid.uuid4())
         original_name = Path(original_filename).stem
-        # Clean the original name (keep only alphanumeric and common chars)
+        # clean the original name (keep only alphanumeric and common chars)
         clean_name = ''.join(c for c in original_name if c.isalnum() or c in '-_')[:50]
         return f"{clean_name}_{unique_id}.webp"
     
@@ -134,37 +134,42 @@ class ImageProcessor:
             HTTPException: If processing fails
         """
         try:
-            # Validate the file
+            # check the file
             self.validate_image_file(file)
             
-            # Read file content
+            # read file content
             content = await file.read()
             
-            # Additional size check after reading
+            # additional size check after reading
             if len(content) > self.MAX_FILE_SIZE:
                 raise HTTPException(
                     status_code=400, 
                     detail=f"File too large. Maximum size: {self.MAX_FILE_SIZE // (1024*1024)}MB"
                 )
             
-            # Open and process image
+            # open and process image
             image = Image.open(io.BytesIO(content))
             
-            # Resize if needed
-            image = self.resize_image_if_needed(image)
-            
-            # Convert to webp
-            image = self.convert_to_webp(image)
-            
-            # Generate unique filename
-            filename = self.generate_filename(file.filename)
-            file_path = self.upload_dir / filename
-            
-            # Save processed image
-            image.save(file_path, format='WEBP', quality=self.WEBP_QUALITY, optimize=True)
-            
-            logger.info(f"Successfully processed image: {filename}")
-            return filename, str(file_path)
+            try:
+                # resize if needed
+                image = self.resize_image_if_needed(image)
+                
+                # convert to webp
+                image = self.convert_to_webp(image)
+                
+                # generate unique filename
+                filename = self.generate_filename(file.filename)
+                file_path = self.upload_dir / filename
+                
+                # save processed image
+                image.save(file_path, format='WEBP', quality=self.WEBP_QUALITY, optimize=True)
+                
+                logger.info(f"Successfully processed image: {filename}")
+                return filename, str(file_path)
+            finally:
+                # Ensure image is closed to release file handles
+                if hasattr(image, 'close'):
+                    image.close()
             
         except HTTPException:
             raise
@@ -181,17 +186,36 @@ class ImageProcessor:
         Returns:
             True if deleted successfully, False otherwise
         """
+        import time
         try:
             file_path = self.upload_dir / filename
-            if file_path.exists():
-                file_path.unlink()
-                logger.info(f"Deleted image: {filename}")
-                return True
+            if not file_path.exists():
+                return False
+            
+            # Try to delete with retries to handle Windows file locking
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    file_path.unlink()
+                    logger.info(f"Deleted image: {filename}")
+                    return True
+                except PermissionError as e:
+                    if attempt < max_retries - 1:
+                        # Wait a bit and retry for Windows file locking issues
+                        time.sleep(0.1)
+                        continue
+                    else:
+                        logger.error(f"Permission error deleting image {filename}: {str(e)}")
+                        return False
+                except Exception as e:
+                    logger.error(f"Error deleting image {filename}: {str(e)}")
+                    return False
+            
             return False
         except Exception as e:
             logger.error(f"Error deleting image {filename}: {str(e)}")
             return False
 
 
-# Global instance
+# global instance
 image_processor = ImageProcessor()

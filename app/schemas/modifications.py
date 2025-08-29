@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class ModificationTypeOut(BaseModel):
     id: int
     name: str
+    name_translations: Optional[Dict[str, str]] = None
     category: str  # 'sauce' or 'removal'
     is_default: bool
     is_active: bool
@@ -18,6 +19,7 @@ class ModificationTypeOut(BaseModel):
 
 class ModificationTypeIn(BaseModel):
     name: str
+    name_translations: Optional[Dict[str, str]] = None
     category: str  # 'sauce' or 'removal'
     is_default: bool = False
     is_active: bool = True
@@ -54,3 +56,17 @@ class ModificationResponse(BaseModel):
     success: bool
     message: str
     modified_items: List[int]  # List of order item IDs that were modified
+
+
+class ModificationTypeLocalizedOut(BaseModel):
+    """localized modification type response that provides translated name based on locale."""
+    id: int
+    name: str  # Localized name based on user's language preference
+    category: str  # 'sauce' or 'removal'
+    is_default: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -34,7 +34,7 @@ def _ensure_init():
 
 
 def health_check() -> Dict[str, str]:
-    """Check SMS integration health and configuration status."""
+    """check SMS integration health and config status."""
     if Client is None:
         return {"status": "unavailable", "reason": "twilio_library_not_installed"}
     
@@ -124,7 +124,7 @@ def check_verification(to_number: str, code: str) -> Dict[str, str]:
 
 
 def send_sms(to_number: str, body: str) -> Dict[str, str]:
-    """Send SMS message to a phone number (legacy function for backwards compatibility)."""
+    """send SMS message to a phone number (legacy function for backwards compatibility)."""
     _ensure_init()
     if not _initialized or not _client:
         return {"status": "skipped", "reason": "sms_not_configured"}

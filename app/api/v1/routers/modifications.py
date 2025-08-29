@@ -14,11 +14,12 @@ from app.schemas.modifications import (
     OrderItemModificationOut,
 )
 from app.services.locale.locale_helper import get_localized_modification_type_name
+from app.services.locale.translation_service import get_translation_service
 
 router = APIRouter(prefix="/modifications", tags=["modifications"])
 
 
-# CRUD endpoints for modification types
+# cRUD endpoints for modification types
 @router.get("/types", response_model=List[ModificationTypeOut])
 def get_modification_types(
     category: str = Query(None, description="Filter by category: sauce or removal"),
@@ -26,7 +27,7 @@ def get_modification_types(
     lc: str = Query("en", pattern="^(ru|kz|en)$"),
     db: Session = Depends(get_db),
 ):
-    """Get all available modification types"""
+    """get all available modification types"""
     query = db.query(models.ModificationType)
     
     if category:
@@ -36,7 +37,7 @@ def get_modification_types(
     
     modification_types = query.order_by(models.ModificationType.name).all()
     
-    # Apply localization
+    # apply localization
     for mod_type in modification_types:
         mod_type.name = get_localized_modification_type_name(mod_type, lc)
     
@@ -49,8 +50,23 @@ def create_modification_type(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Create a new modification type (admin only)"""
-    modification_type = models.ModificationType(**payload.dict())
+    """create a new modification type (admin only)"""
+    # Auto-generate translations if Russian text is provided
+    translation_service = get_translation_service()
+    name_translations = payload.name_translations
+    if translation_service.is_available():
+        name_translations = translation_service.auto_populate_translations(
+            payload.name, 
+            existing_translations=payload.name_translations
+        )
+    
+    modification_type = models.ModificationType(
+        name=payload.name,
+        name_translations=name_translations,
+        category=payload.category,
+        is_default=payload.is_default,
+        is_active=payload.is_active
+    )
     db.add(modification_type)
     db.commit()
     db.refresh(modification_type)
@@ -64,13 +80,31 @@ def update_modification_type(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Update a modification type (admin only)"""
+    """update a modification type (admin only)"""
     modification_type = db.get(models.ModificationType, type_id)
     if not modification_type:
         raise HTTPException(status_code=404, detail="Modification type not found")
     
-    for key, value in payload.dict().items():
-        setattr(modification_type, key, value)
+    # Auto-generate translations if Russian text is provided
+    translation_service = get_translation_service()
+    
+    # update fields explicitly to handle translations properly
+    if payload.name is not None:
+        modification_type.name = payload.name
+        # Auto-translate name if translation service is available
+        if translation_service.is_available():
+            modification_type.name_translations = translation_service.auto_populate_translations(
+                payload.name, 
+                existing_translations=modification_type.name_translations
+            )
+    if payload.name_translations is not None:
+        modification_type.name_translations = payload.name_translations
+    if payload.category is not None:
+        modification_type.category = payload.category
+    if payload.is_default is not None:
+        modification_type.is_default = payload.is_default
+    if payload.is_active is not None:
+        modification_type.is_active = payload.is_active
     
     db.commit()
     db.refresh(modification_type)
@@ -83,7 +117,7 @@ def delete_modification_type(
     db: Session = Depends(get_db),
     _: models.User = Depends(require_admin),
 ):
-    """Delete a modification type (admin only)"""
+    """delete a modification type (admin only)"""
     modification_type = db.get(models.ModificationType, type_id)
     if not modification_type:
         raise HTTPException(status_code=404, detail="Modification type not found")
@@ -93,15 +127,15 @@ def delete_modification_type(
     return {"message": "Modification type deleted successfully"}
 
 
-# Single dish modification endpoints
+# single dish modification endpoints
 @router.post("/single", response_model=ModificationResponse)
 def apply_single_modification(
     payload: SingleModificationRequest,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Apply modifications to a single order item"""
-    # Verify order item exists and belongs to user
+    """apply modifications to a single order item"""
+    # verify order item exists and belongs to user
     order_item = db.get(models.OrderItem, payload.order_item_id)
     if not order_item:
         raise HTTPException(status_code=404, detail="Order item not found")
@@ -110,23 +144,23 @@ def apply_single_modification(
     if not order or order.user_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Check if order can still be modified (not delivered/cancelled)
+    # check if order can still be modified (not delivered/cancelled)
     if order.status in ["DELIVERED", "CANCELLED"]:
         raise HTTPException(status_code=400, detail="Cannot modify completed order")
     
-    # Clear existing modifications for this order item
+    # clear existing modifications for this order item
     db.query(models.OrderItemModification).filter(
         models.OrderItemModification.order_item_id == payload.order_item_id
     ).delete()
     
-    # Apply new modifications
+    # apply new modifications
     for mod in payload.modifications:
-        # Verify modification type exists
+        # verify modification type exists
         mod_type = db.get(models.ModificationType, mod.modification_type_id)
         if not mod_type or not mod_type.is_active:
             raise HTTPException(status_code=400, detail=f"Invalid modification type: {mod.modification_type_id}")
         
-        # Create modification
+        # create modification
         order_mod = models.OrderItemModification(
             order_item_id=payload.order_item_id,
             modification_type_id=mod.modification_type_id,
@@ -143,18 +177,18 @@ def apply_single_modification(
     )
 
 
-# Bulk modification endpoints
+# bulk modification endpoints
 @router.post("/bulk", response_model=ModificationResponse)
 def apply_bulk_modifications(
     payload: BulkModificationRequest,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Apply modifications to multiple order items"""
+    """apply modifications to multiple order items"""
     if not payload.order_item_ids:
         raise HTTPException(status_code=400, detail="Order item IDs required")
     
-    # Verify all order items exist and belong to user
+    # verify all order items exist and belong to user
     order_items = db.query(models.OrderItem).filter(
         models.OrderItem.id.in_(payload.order_item_ids)
     ).all()
@@ -162,7 +196,7 @@ def apply_bulk_modifications(
     if len(order_items) != len(payload.order_item_ids):
         raise HTTPException(status_code=404, detail="Some order items not found")
     
-    # Verify all orders belong to user and can be modified
+    # verify all orders belong to user and can be modified
     order_ids = list(set(item.order_id for item in order_items))
     orders = db.query(models.Order).filter(models.Order.id.in_(order_ids)).all()
     
@@ -175,19 +209,19 @@ def apply_bulk_modifications(
     modified_items = []
     
     for order_item_id in payload.order_item_ids:
-        # Clear existing modifications for this order item
+        # clear existing modifications for this order item
         db.query(models.OrderItemModification).filter(
             models.OrderItemModification.order_item_id == order_item_id
         ).delete()
         
-        # Apply new modifications
+        # apply new modifications
         for mod in payload.modifications:
-            # Verify modification type exists
+            # verify modification type exists
             mod_type = db.get(models.ModificationType, mod.modification_type_id)
             if not mod_type or not mod_type.is_active:
                 raise HTTPException(status_code=400, detail=f"Invalid modification type: {mod.modification_type_id}")
             
-            # Create modification
+            # create modification
             order_mod = models.OrderItemModification(
                 order_item_id=order_item_id,
                 modification_type_id=mod.modification_type_id,
@@ -213,8 +247,8 @@ def get_order_item_modifications(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Get all modifications for a specific order item"""
-    # Verify order item exists and belongs to user
+    """get all modifications for a specific order item"""
+    # verify order item exists and belongs to user
     order_item = db.get(models.OrderItem, order_item_id)
     if not order_item:
         raise HTTPException(status_code=404, detail="Order item not found")
@@ -227,7 +261,7 @@ def get_order_item_modifications(
         models.OrderItemModification.order_item_id == order_item_id
     ).all()
     
-    # Apply localization to nested modification types
+    # apply localization to nested modification types
     for modification in modifications:
         if modification.modification_type:
             modification.modification_type.name = get_localized_modification_type_name(modification.modification_type, lc)
@@ -241,8 +275,8 @@ def clear_order_item_modifications(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Clear all modifications for a specific order item"""
-    # Verify order item exists and belongs to user
+    """clear all modifications for a specific order item"""
+    # verify order item exists and belongs to user
     order_item = db.get(models.OrderItem, order_item_id)
     if not order_item:
         raise HTTPException(status_code=404, detail="Order item not found")
@@ -251,11 +285,11 @@ def clear_order_item_modifications(
     if not order or order.user_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Check if order can still be modified
+    # check if order can still be modified
     if order.status in ["DELIVERED", "CANCELLED"]:
         raise HTTPException(status_code=400, detail="Cannot modify completed order")
     
-    # Delete all modifications for this order item
+    # delete all modifications for this order item
     deleted_count = db.query(models.OrderItemModification).filter(
         models.OrderItemModification.order_item_id == order_item_id
     ).delete()

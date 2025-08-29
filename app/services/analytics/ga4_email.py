@@ -1,23 +1,23 @@
-import os
 import hashlib
 import httpx
 from typing import Dict, Any, Optional
+from app.core.config import settings
 
 
-GA4_MEASUREMENT_ID = os.environ.get("GA4_MEASUREMENT_ID")
-GA4_API_SECRET = os.environ.get("GA4_API_SECRET")
+GA4_MEASUREMENT_ID = settings.GA4_MEASUREMENT_ID
+GA4_API_SECRET = settings.GA4_API_SECRET
 GA4_ENDPOINT = "https://www.google-analytics.com/mp/collect"
 
 
 def _hash_email(email: str) -> str:
-    """Create deterministic client_id from email for GA4."""
+    """create deterministic client_id from email for GA4."""
     if not email:
         return "anonymous"
     return hashlib.sha256(email.encode()).hexdigest()
 
 
 def _map_event_type_to_ga4(event_type: str) -> Optional[str]:
-    """Map Resend event types to GA4 event names."""
+    """map Resend event types to GA4 event names."""
     mapping = {
         "email.sent": "email_sent",
         "email.delivered": "email_delivered", 
@@ -62,7 +62,7 @@ async def forward_email_event_to_ga4(
     # generate deterministic client_id from recipient email
     client_id = _hash_email(recipient or "")
     
-    # build event parameters
+    # build event params
     event_params = {}
     
     if template:
@@ -72,7 +72,7 @@ async def forward_email_event_to_ga4(
     if link:
         event_params["link"] = link
     
-    # add metadata as custom parameters
+    # add metadata as custom params
     if meta and isinstance(meta, dict):
         tags = meta.get("tags", {})
         if isinstance(tags, dict):
@@ -127,7 +127,7 @@ async def forward_email_event_to_ga4(
 
 
 def health_check() -> Dict[str, Any]:
-    """Check GA4 integration health."""
+    """check GA4 integration health."""
     return {
         "status": "configured" if GA4_MEASUREMENT_ID and GA4_API_SECRET else "not_configured",
         "measurement_id_configured": bool(GA4_MEASUREMENT_ID),
